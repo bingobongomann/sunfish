@@ -72,7 +72,7 @@ class Position(namedtuple('Position', 'board, key')):
     def move(self, move):
         newboard = self.board.copy()
         newboard.push(move)
-        return Position(newboard, chess.polyglot.zobrist_hash(self.board))
+        return Position(newboard, chess.polyglot.zobrist_hash(newboard))
 
 
 ###############################################################################
@@ -88,6 +88,8 @@ class Searcher:
         self.tp_move = {}
         self.history = list()
         self.nodes = 0
+        self.tablehits =0
+
 
     def bound(self, pos, gamma, depth, root=True):
         """ returns r where
@@ -105,7 +107,9 @@ class Searcher:
         # the remaining code has to be comfortable with being mated, stalemated
         # or able to capture the opponent king.
         if pos.board.is_checkmate():
-            return 1
+            return -1
+        #if pos.board.is_stalemate():
+        #    return 0
 
         # We detect 3-fold captures by comparing against previously
         # _actually played_ positions.
@@ -115,18 +119,20 @@ class Searcher:
         # FIXME: This is not true, since other positions will be affected by
         # the new values for all the drawn positions.
         if DRAW_TEST:
-            if pos.board.is_repetition():
-                return 0
-            if pos.board.is_stalemate():
-                return 0
+            if(pos.key in histpos.key for histpos in self.history):
+                if pos.board.is_repetition():
+                    return 0
+                
 
         # Look in the table if we have already searched this position before.
         # We also need to be sure, that the stored search was over the same
         # nodes as the current search.
         entry = self.tp_score.get((pos.key, depth, root), Entry(-1, 1))
         if entry.lower >= gamma and (not root or self.tp_move.get(pos.key) is not None):
+            self.tablehits +=1
             return entry.lower
         if entry.upper < gamma:
+            self.tablehits +=1
             return entry.upper
 
         # Here extensions may be added
@@ -137,21 +143,24 @@ class Searcher:
         def moves():
             state = GameState(pos.board)
             pred_value, legal_moves, p_vec_small, cp, depthnet, nodes, time_elapsed_s, nps, pv = raw_agent.evaluate_board_state(state)
-            print(legal_moves[0])
+            #print(pos.board)
+            #print(pos.key)
+            #print(pred_value)
             if depth == 0:
+
                 yield None, pred_value
             else:
                 mergedlist = list(zip(legal_moves, p_vec_small))
-                print(mergedlist)
+                #print(mergedlist)
                 sortedlist = sorted(mergedlist, key=lambda x:x[1], reverse=True)
-                print(sortedlist)
+                #print(sortedlist)
                 for move in sortedlist:
-                    if move[0] in pos.board.legal_moves:
                         yield move[0], -self.bound(pos.move(move[0]), gamma, depth-1, root=False)
 
         # Run through the moves, shortcutting when possible
         best = -1
         for move, score in moves():
+            #print('move:', move , 'score',score)
             best = max(best, score)
             if best >= gamma:
                 #print('newbest', move, ':', score, 'depth',depth)
@@ -160,6 +169,8 @@ class Searcher:
                 # Save the move for pv construction and killer heuristic
                 self.tp_move[pos.key] = move
                 break
+                
+                
                 
                 
 
@@ -176,7 +187,6 @@ class Searcher:
     def search(self, pos, history=()):
         """ Iterative deepening MTD-bi search """
         self.nodes = 0
-        print(pos.board)
         print(pos.key)
         if DRAW_TEST:
             self.history = history
@@ -191,20 +201,24 @@ class Searcher:
             # 'while lower != upper' would work, but play tests show a margin of 20 plays
             # better.
             lower, upper = -1, +1
-            while lower < upper:
-                gamma = (lower+upper+0.001)/2
+            self.tablehits =0
+            while True:
+                gamma = (lower+upper)/2 +0.001/2
                 score = self.bound(pos, gamma, depth)
-                print('score',score,'upper', upper, 'lower', lower,'gamma', gamma)
                 if score >= gamma:
                     lower = score
                 if score < gamma:
                     upper = score
+                print('score',score,'upper', upper, 'lower', lower,'gamma', gamma)
+                if gamma-0.001 < score and score < gamma:
+                    break
             # We want to make sure the move to play hasn't been kicked out of the table,
             # So we make another call that must always fail high and thus produce a move.
+            #print('Lower:', lower, 'Upper:', upper, 'Gamma:', gamma, 'score:', score, 'bounds: ',bounds)
             self.bound(pos, lower, depth)
             # If the game hasn't finished we can retrieve our move from the
             # transposition table.
-            yield depth, self.tp_move.get(pos.key), self.tp_score.get((pos.key, depth, True)).lower
+            yield depth, self.tp_move.get(pos.key), self.tp_score.get((pos.key, depth, True)).lower, self.nodes, self.tablehits
 
 
 ###############################################################################
@@ -239,7 +253,12 @@ def main():
     hist = [Position(initial, chess.polyglot.zobrist_hash(initial))]
     searcher = Searcher()
     while True:
+        print('Pocket Black:')
+        print(hist[-1].board.pockets[chess.BLACK])
+        print('_______________')
         print(hist[-1].board)
+        print('Pocket White:')
+        print(hist[-1].board.pockets[chess.WHITE])
 
         if hist[-1].board.is_checkmate():
             print("You lost")
@@ -260,7 +279,12 @@ def main():
 
         # After our move we rotate the board and print it again.
         # This allows us to see the effect of our move.
+        print('Pocket Black:')
+        print(hist[-1].board.pockets[chess.BLACK])
+        print('_______________')
         print(hist[-1].board)
+        print('Pocket White:')
+        print(hist[-1].board.pockets[chess.WHITE])
 
         if hist[-1].board.is_checkmate():
             print("You won")
@@ -268,15 +292,14 @@ def main():
 
         # Fire up the engine to look for a move.
         start = time.time()
-        for _depth, move, score in searcher.search(hist[-1], hist):
-            if time.time() - start > 1:
+        for _depth, move, score, nodes ,hits in searcher.search(hist[-1], hist):
+            print('depth:',_depth, 'hits', hits)
+            if time.time() - start > 20 or score==1:
+                print('Nodes Searched:',nodes, 'score:', score)
                 break
 
-        if score == 1:
-            print("Checkmate!")
 
-        # The black player moves from a rotated position, so we have to
-        # 'back rotate' the move before printing it.
+
         print("My move:", move)
         hist.append(hist[-1].move(move))
 
