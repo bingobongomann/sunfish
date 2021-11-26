@@ -13,6 +13,7 @@ sys.path.insert(0,'../CrazyAra/')
 from DeepCrazyhouse.src.domain.agent.neural_net_api import NeuralNetAPI
 from DeepCrazyhouse.src.domain.agent.player.raw_net_agent import RawNetAgent
 from DeepCrazyhouse.src.domain.variants.game_state import GameState
+from DeepCrazyhouse.src.domain.util import get_check_move_mask
 import numpy as np
 
 
@@ -44,6 +45,8 @@ TABLE_SIZE = 1e7
 QS_LIMIT = 219
 EVAL_ROUGHNESS = 13
 DRAW_TEST = True
+ENHANCE_CHECKS = True
+ENHANCE_CAPTURES = True
 
 batch_size = 8
 threads = 8
@@ -89,6 +92,7 @@ class Searcher:
         self.history = list()
         self.nodes = 0
         self.tablehits =0
+        self.NN_evals = 0
 
 
     def bound(self, pos, gamma, depth, root=True):
@@ -143,6 +147,7 @@ class Searcher:
         def moves():
             state = GameState(pos.board)
             pred_value, legal_moves, p_vec_small, cp, depthnet, nodes, time_elapsed_s, nps, pv = raw_agent.evaluate_board_state(state)
+            self.NN_evals += 1
             #print(pos.board)
             #print(pos.key)
             #print(pred_value)
@@ -150,12 +155,35 @@ class Searcher:
 
                 yield None, pred_value
             else:
+                if ENHANCE_CHECKS:
+                    check_mask, nb_checks = get_check_move_mask(pos.board, legal_moves)
+
+                    if nb_checks > 0:
+                        # increase chances of checking
+                        p_vec_small[np.logical_and(check_mask, p_vec_small < 0.1)] += 0.1
+                        # normalize back to 1.0
+                    p_vec_small /= p_vec_small.sum()
+                if ENHANCE_CAPTURES:
+                    for capture_move in pos.board.generate_legal_captures():
+                        index = legal_moves.index(capture_move)
+                        if p_vec_small[index] < 0.04:
+                            p_vec_small[index] += 0.04
+                    p_vec_small /= p_vec_small.sum()
+                P_sum= 0
                 mergedlist = list(zip(legal_moves, p_vec_small))
                 #print(mergedlist)
                 sortedlist = sorted(mergedlist, key=lambda x:x[1], reverse=True)
                 #print(sortedlist)
+                move = self.tp_move.get(pos.key)
+                if move is not None:
+                    sortedlist.insert(0, (move,0))
                 for move in sortedlist:
+                    if(P_sum<0.95):
+                        P_sum=P_sum + move[1]
                         yield move[0], -self.bound(pos.move(move[0]), gamma, depth-1, root=False)
+                    else:
+                        #print('quantil reached')
+                        break
 
         # Run through the moves, shortcutting when possible
         best = -1
@@ -187,6 +215,7 @@ class Searcher:
     def search(self, pos, history=()):
         """ Iterative deepening MTD-bi search """
         self.nodes = 0
+        self.NN_evals = 0
         print(pos.key)
         if DRAW_TEST:
             self.history = history
@@ -202,23 +231,22 @@ class Searcher:
             # better.
             lower, upper = -1, +1
             self.tablehits =0
-            while True:
-                gamma = (lower+upper)/2 +0.001/2
+            while lower < upper:
+                gamma = (lower+upper)/2 
                 score = self.bound(pos, gamma, depth)
                 if score >= gamma:
                     lower = score
                 if score < gamma:
                     upper = score
                 print('score',score,'upper', upper, 'lower', lower,'gamma', gamma)
-                if gamma-0.001 < score and score < gamma:
-                    break
+                
             # We want to make sure the move to play hasn't been kicked out of the table,
             # So we make another call that must always fail high and thus produce a move.
             #print('Lower:', lower, 'Upper:', upper, 'Gamma:', gamma, 'score:', score, 'bounds: ',bounds)
             self.bound(pos, lower, depth)
             # If the game hasn't finished we can retrieve our move from the
             # transposition table.
-            yield depth, self.tp_move.get(pos.key), self.tp_score.get((pos.key, depth, True)).lower, self.nodes, self.tablehits
+            yield depth, self.tp_move.get(pos.key), self.tp_score.get((pos.key, depth, True)).lower, self.nodes, self.tablehits, self.NN_evals
 
 
 ###############################################################################
@@ -292,10 +320,21 @@ def main():
 
         # Fire up the engine to look for a move.
         start = time.time()
-        for _depth, move, score, nodes ,hits in searcher.search(hist[-1], hist):
-            print('depth:',_depth, 'hits', hits)
-            if time.time() - start > 20 or score==1:
-                print('Nodes Searched:',nodes, 'score:', score)
+        oldtime = start
+        f= 1
+        for _depth, move, score, nodes ,TT_hits ,NN_evals in searcher.search(hist[-1], hist):
+            newtime = time.time()
+            it_time = newtime -oldtime
+            if _depth > 1:
+                f = it_time/it_time_old
+            oldtime = newtime
+            it_time_old = it_time
+
+
+            print('depth:',_depth, 'hits', TT_hits, 'Iteration_factor:', f)
+
+            if (time.time() - start)*f > 15 or score==1:
+                print('Nodes Searched:',nodes, 'score:', score, 'NN evals:', NN_evals, 'time', time.time()-start)
                 break
 
 
