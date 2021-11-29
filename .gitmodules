@@ -1,0 +1,6 @@
+[submodule "CrazyAra"]
+	path = CrazyAra
+	url = https://github.com/QueensGambit/CrazyAra
+[submodule "books"]
+	path = books
+	url = https://github.com/ianfab/books

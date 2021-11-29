@@ -4,6 +4,11 @@ import time
 import sys
 
 import sunfish
+import CrazySunfish
+import chess
+import chess.variant
+import chess.polyglot
+from CrazySunfish import Position
 
 ################################################################################
 # This module contains functions used by test.py and xboard.py.
@@ -15,6 +20,7 @@ import sunfish
 WHITE, BLACK = range(2)
 
 FEN_INITIAL = 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1'
+FEN_INITIAL_CRAZYHOUSE = chess.variant.CrazyhouseBoard().starting_fen
 
 
 def search(searcher, pos, secs, history=()):
@@ -123,7 +129,8 @@ def parseSAN(pos, msan):
         'p':p, 'src':src, 'dst': dst, 'mvs':list(gen_legal_moves(pos))})
 
 def readPGN(file):
-    """ Yields a number of [(pos, move), ...] lists. """
+    """ Yields a number of [(    CrazySunfish.Position()
+pos, move), ...] lists. """
     def _parse_single_pgn(lines):
         # Remove comments and numbers.
         parts = re.sub('{.*?}', '', ' '.join(lines)).split()
@@ -174,6 +181,14 @@ def parseFEN(fen):
     pos = sunfish.Position(board, score, wc, bc, ep, 0)
     return pos if color == 'w' else pos.rotate()
 
+def parseCrazyFEN(fen):
+    fen = fen.replace("[-]","[]")
+    print('fen after replace: ', fen)
+    board = chess.variant.CrazyhouseBoard(fen)
+    pos = Position(board, chess.polyglot.zobrist_hash(board))
+    print('fen parsed')
+    return pos
+
 def renderFEN(pos, half_move_clock=0, full_move_clock=1):
     color = 'wb'[get_color(pos)]
     if get_color(pos) == BLACK:
@@ -201,10 +216,21 @@ def parseEPD(epd, opt_dict=False):
     if opt_dict:
         opts = dict(p.split(maxsplit=1) for p in opts)
     return fen, opts
+def parseMove(move):
+    return chess.Move.from_uci(move)
 
 ################################################################################
 # Pretty print
 ################################################################################
+def crazypv(searcher, pos, include_scores=True):
+    move = searcher.tp_move.get(pos.key)
+    res =[]
+    while move is not None:
+        res.append(str(move)+' ')
+        pos = pos.move(move)
+        move = searcher.tp_move.get(pos.key)
+    return ' '.join(res)
+    
 
 def pv(searcher, pos, include_scores=True, include_loop=False):
     res = []

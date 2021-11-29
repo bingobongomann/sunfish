@@ -11,28 +11,22 @@ import logging
 import argparse
 
 import tools
-import sunfish
-
 from tools import WHITE, BLACK, Unbuffered
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument('module', help='sunfish.py file (without .py)', type=str, default='sunfish', nargs='?')
-    parser.add_argument('--tables', metavar='pst', help='alternative pst table', type=str, default=None)
+    parser.add_argument('module', help='crazysunfish.py file (without .py)', type=str, default='CrazySunfish', nargs='?')
     args = parser.parse_args()
 
-    sunfish = importlib.import_module(args.module)
-    if args.tables is not None:
-        pst_module = importlib.import_module(args.tables)
-        sunfish.pst = pst_module.pst
+    Crazysunfish = importlib.import_module(args.module)
 
-    logging.basicConfig(filename='sunfish.log', level=logging.DEBUG)
+    logging.basicConfig(filename='Crazysunfish.log', level=logging.DEBUG)
     out = Unbuffered(sys.stdout)
     def output(line):
-        print(line, file=out)
+        print(line)
         logging.debug(line)
-    pos = tools.parseFEN(tools.FEN_INITIAL)
-    searcher = sunfish.Searcher()
+    pos = tools.parseCrazyFEN(tools.FEN_INITIAL_CRAZYHOUSE)
+    searcher = Crazysunfish.Searcher()
     color = WHITE
     our_time, opp_time = 1000, 1000 # time in centi-seconds
     show_thinking = True
@@ -50,15 +44,16 @@ def main():
             break
 
         elif smove == 'uci':
-            output('id name Sunfish')
-            output('id author Thomas Ahle & Contributors')
+            output('id name CrazySunfish')
+            output('id author Jannik Holmer, based on Sunfish by Thomas Ahle &contributers')
+            output('option name UCI_Variant type combo default crazyhouse var crazyhouse')
             output('uciok')
 
         elif smove == 'isready':
             output('readyok')
 
         elif smove == 'ucinewgame':
-            stack.append('position fen ' + tools.FEN_INITIAL)
+            stack.append('position fen ' + tools.FEN_INITIAL_CRAZYHOUSE)
 
         # syntax specified in UCI
         # position [fen  | startpos ]  moves  ....
@@ -79,6 +74,7 @@ def main():
                     fenpart = smove
 
                 _, _, fen = fenpart.split(' ', 2)
+                print(fen)
 
             elif params[1] == 'startpos':
                 fen = tools.FEN_INITIAL
@@ -86,12 +82,10 @@ def main():
             else:
                 pass
 
-            pos = tools.parseFEN(fen)
-            color = WHITE if fen.split()[1] == 'w' else BLACK
+            pos = tools.parseCrazyFEN(fen)
 
             for move in moveslist:
-                pos = pos.move(tools.mparse(color, move))
-                color = 1 - color
+                pos = pos.move(tools.parseMove(move))
 
         elif smove.startswith('go'):
             #  default options
@@ -113,14 +107,14 @@ def main():
 
             start = time.time()
             ponder = None
-            for sdepth, _move, _score in searcher.search(pos):
-                moves = tools.pv(searcher, pos, include_scores=False)
+            for sdepth, _move, _score , nodes, T_hit, NN_evals in searcher.search(pos):
+                moves = tools.crazypv(searcher, pos, include_scores=False)
 
                 if show_thinking:
-                    entry = searcher.tp_score.get((pos, sdepth, True))
-                    score = int(round((entry.lower + entry.upper)/2))
+                    entry = searcher.tp_score.get((pos.key, sdepth, True))
+                    score = (entry.lower + entry.upper)/2
                     usedtime = int((time.time() - start) * 1000)
-                    moves_str = moves if len(moves) < 100 else ''
+                    moves_str = moves if len(moves) < 15 else ''
                     output('info depth {} score cp {} time {} nodes {} pv {}'.format(sdepth, score, usedtime, searcher.nodes, moves_str))
 
                 if len(moves) > 5:
@@ -135,17 +129,15 @@ def main():
                 if sdepth >= depth:
                     break
 
-            entry = searcher.tp_score.get((pos, sdepth, True))
-            m, s = searcher.tp_move.get(pos), entry.lower
+            entry = searcher.tp_score.get((pos.key, sdepth, True))
+            m, s = searcher.tp_move.get(pos.key), entry.lower
             # We only resign once we are mated.. That's never?
-            if s == -sunfish.MATE_UPPER:
-                output('resign')
+            
+            moves = moves.split(' ')
+            if len(moves) > 1:
+                output(f'bestmove {moves[0]} ponder {moves[1]}')
             else:
-                moves = moves.split(' ')
-                if len(moves) > 1:
-                    output(f'bestmove {moves[0]} ponder {moves[1]}')
-                else:
-                    output('bestmove ' + moves[0])
+                output('bestmove ' + moves[0])
 
         elif smove.startswith('time'):
             our_time = int(smove.split()[1])

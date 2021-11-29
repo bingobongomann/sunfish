@@ -7,27 +7,21 @@ import chess
 import chess.variant
 import chess.polyglot
 import re, sys, time
-
+import numpy as np
 from numpy.core.fromnumeric import sort
-sys.path.insert(0,'../CrazyAra/')
+sys.path.insert(0,'CrazyAra/')
 from DeepCrazyhouse.src.domain.agent.neural_net_api import NeuralNetAPI
 from DeepCrazyhouse.src.domain.agent.player.raw_net_agent import RawNetAgent
 from DeepCrazyhouse.src.domain.variants.game_state import GameState
 from DeepCrazyhouse.src.domain.util import get_check_move_mask
-import numpy as np
 
 
-#TODO Jannik: Positon durch pychess board ersetzen 
-# in moves() im bound search die reihenfolge der raw net moves nehmen 
-# in bound() die bewertung durch das NN vornehmen und im TP-Table speichern 
 
 ###############################################################################
 # Global constants
 ###############################################################################
 
-# Our board is represented as a 120 character string. The padding allows for
-# fast detection of moves that don't stay within the board.
-A1, H1, A8, H8 = 91, 98, 21, 28
+
 initial = chess.variant.CrazyhouseBoard()
 
 
@@ -45,11 +39,12 @@ TABLE_SIZE = 1e7
 QS_LIMIT = 219
 EVAL_ROUGHNESS = 13
 DRAW_TEST = True
-ENHANCE_CHECKS = True
-ENHANCE_CAPTURES = True
+ENHANCE_CHECKS = False
+ENHANCE_CAPTURES = False
+QUANTIL = 0.99
 
-batch_size = 8
-threads = 8
+batch_size = 1
+threads = 1
 
 nets = []
 for idx in range(2):
@@ -124,7 +119,7 @@ class Searcher:
         # the new values for all the drawn positions.
         if DRAW_TEST:
             if(pos.key in histpos.key for histpos in self.history):
-                if pos.board.is_repetition():
+                if pos.board.can_claim_draw():
                     return 0
                 
 
@@ -175,10 +170,11 @@ class Searcher:
                 sortedlist = sorted(mergedlist, key=lambda x:x[1], reverse=True)
                 #print(sortedlist)
                 move = self.tp_move.get(pos.key)
+                #bestmove from previous iteration 
                 if move is not None:
                     sortedlist.insert(0, (move,0))
                 for move in sortedlist:
-                    if(P_sum<0.95):
+                    if(P_sum<QUANTIL):
                         P_sum=P_sum + move[1]
                         yield move[0], -self.bound(pos.move(move[0]), gamma, depth-1, root=False)
                     else:
@@ -322,16 +318,18 @@ def main():
         start = time.time()
         oldtime = start
         f= 1
+        f_new =0
         for _depth, move, score, nodes ,TT_hits ,NN_evals in searcher.search(hist[-1], hist):
             newtime = time.time()
             it_time = newtime -oldtime
             if _depth > 1:
-                f = it_time/it_time_old
+                f_new = it_time/it_time_old
+                f = max(f,f_new)
             oldtime = newtime
             it_time_old = it_time
 
 
-            print('depth:',_depth, 'hits', TT_hits, 'Iteration_factor:', f)
+            print('depth:',_depth, 'hits', TT_hits, 'Iteration_factor:', f_new)
 
             if (time.time() - start)*f > 15 or score==1:
                 print('Nodes Searched:',nodes, 'score:', score, 'NN evals:', NN_evals, 'time', time.time()-start)
