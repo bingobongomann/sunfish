@@ -68,7 +68,7 @@ class Position(namedtuple('Position', 'board, key')):
             yield x
 
     def move(self, move):
-        newboard = self.board.copy()
+        newboard = self.board.copy(stack=False)
         newboard.push(move)
         return Position(newboard, chess.polyglot.zobrist_hash(newboard))
 
@@ -90,12 +90,18 @@ class Searcher:
         self.NN_evals = 0
 
 
-    def bound(self, pos, gamma, depth, root=True):
+    def bound(self, pos, gamma, depth, root=True, move_given=''):
         """ returns r where
                 s(pos) <= r < gamma    if gamma > s(pos)
                 gamma <= r <= s(pos)   if gamma <= s(pos)"""
         self.nodes += 1
-        
+        print('nodes: ',self.nodes, ' move given: ', move_given)
+        print('Pocket Black:')
+        print(pos.board.pockets[chess.BLACK])
+        print('_______________')
+        print(pos.board)
+        print('Pocket White:')
+        print(pos.board.pockets[chess.WHITE])
         # Depth <= 0 is QSearch. Here any position is searched as deeply as is needed for
         # calmness, and from this point on there is no difference in behaviour depending on
         # depth, so so there is no reason to keep different depths in the transposition table.
@@ -129,9 +135,11 @@ class Searcher:
         entry = self.tp_score.get((pos.key, depth, root), Entry(-1, 1))
         if entry.lower >= gamma and (not root or self.tp_move.get(pos.key) is not None):
             self.tablehits +=1
+            print('tablehit')
             return entry.lower
         if entry.upper < gamma:
             self.tablehits +=1
+            print('tablehit')
             return entry.upper
 
         # Here extensions may be added
@@ -141,6 +149,7 @@ class Searcher:
         # This allows us to define the moves, but only calculate them if needed.
         def moves():
             state = GameState(pos.board)
+            
             pred_value, legal_moves, p_vec_small, cp, depthnet, nodes, time_elapsed_s, nps, pv = raw_agent.evaluate_board_state(state)
             self.NN_evals += 1
             #print(pos.board)
@@ -152,18 +161,21 @@ class Searcher:
             else:
                 if ENHANCE_CHECKS:
                     check_mask, nb_checks = get_check_move_mask(pos.board, legal_moves)
-
                     if nb_checks > 0:
                         # increase chances of checking
                         p_vec_small[np.logical_and(check_mask, p_vec_small < 0.1)] += 0.1
-                        # normalize back to 1.0
+                    # normalize back to 1.0
                     p_vec_small /= p_vec_small.sum()
+
                 if ENHANCE_CAPTURES:
                     for capture_move in pos.board.generate_legal_captures():
                         index = legal_moves.index(capture_move)
                         if p_vec_small[index] < 0.04:
                             p_vec_small[index] += 0.04
+                    # normalize back to 1.0
                     p_vec_small /= p_vec_small.sum()
+
+
                 P_sum= 0
                 mergedlist = list(zip(legal_moves, p_vec_small))
                 #print(mergedlist)
@@ -176,7 +188,9 @@ class Searcher:
                 for move in sortedlist:
                     if(P_sum<QUANTIL):
                         P_sum=P_sum + move[1]
-                        yield move[0], -self.bound(pos.move(move[0]), gamma, depth-1, root=False)
+                        print('Psum:',P_sum)
+                        newpos = pos.move(move[0])
+                        yield move[0], -self.bound(newpos, gamma, depth-1, root=False, move_given= move[0])
                     else:
                         #print('quantil reached')
                         break
@@ -191,6 +205,7 @@ class Searcher:
                 # Clear before setting, so we always have a value
                 if len(self.tp_move) > TABLE_SIZE: self.tp_move.clear()
                 # Save the move for pv construction and killer heuristic
+                print('move:', move, 'is better than gamma with ', score, ' / ', gamma)
                 self.tp_move[pos.key] = move
                 break
                 
@@ -220,7 +235,7 @@ class Searcher:
 
         # In finished games, we could potentially go far enough to cause a recursion
         # limit exception. Hence we bound the ply.
-        for depth in range(1, 300):
+        for depth in range(1, 2):
             # The inner loop is a binary search on the score of the position.
             # Inv: lower <= score <= upper
             # 'while lower != upper' would work, but play tests show a margin of 20 plays
@@ -238,8 +253,8 @@ class Searcher:
                 
             # We want to make sure the move to play hasn't been kicked out of the table,
             # So we make another call that must always fail high and thus produce a move.
+            self.bound(pos,lower,depth)
             #print('Lower:', lower, 'Upper:', upper, 'Gamma:', gamma, 'score:', score, 'bounds: ',bounds)
-            self.bound(pos, lower, depth)
             # If the game hasn't finished we can retrieve our move from the
             # transposition table.
             yield depth, self.tp_move.get(pos.key), self.tp_score.get((pos.key, depth, True)).lower, self.nodes, self.tablehits, self.NN_evals
