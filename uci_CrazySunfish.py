@@ -85,13 +85,13 @@ def main():
             pos = tools.parseCrazyFEN(fen)
 
             for move in moveslist:
-                pos = pos.move(tools.parseMove(move))
+                pos = pos.apply_move(tools.parseMove(move))
 
         elif smove.startswith('go'):
             #  default options
             depth = 1000
             movetime = -1
-
+            our_time = -1
             _, *params = smove.split(' ')
             for param, val in zip(*2*(iter(params),)):
                 if param == 'depth':
@@ -106,31 +106,40 @@ def main():
             moves_remain = 40
 
             start = time.time()
+            oldtime = start
+            f = 1
             ponder = None
             for sdepth, _move, _score , nodes, T_hit, NN_evals in searcher.search(pos):
                 moves = tools.crazypv(searcher, pos, include_scores=False)
 
+                newtime = time.time()
+                it_time = newtime -oldtime
+                if sdepth > 1:
+                    f_new = it_time/it_time_old
+                    f = max(f,f_new)
+                oldtime = newtime
+                it_time_old = it_time
+
                 if show_thinking:
-                    entry = searcher.tp_score.get((pos.key, sdepth, True))
-                    score = (entry.lower + entry.upper)/2
-                    usedtime = int((time.time() - start) * 1000)
+                    entry = searcher.tp_score.get(pos.key)
+                    score = entry.Score
+                    usedtime = int((time.time() - start)*1000)
                     moves_str = moves if len(moves) < 15 else ''
-                    output('info depth {} score cp {} time {} nodes {} pv {}'.format(sdepth, score, usedtime, searcher.nodes, moves_str))
+                    output('info depth {} score cp {} time {}ms nodes {} pv {}'.format(sdepth, score, usedtime, searcher.nodes, moves_str))
 
                 if len(moves) > 5:
                     ponder = moves[1]
 
-                if movetime > 0 and (time.time() - start) * 1000 > movetime:
+                if movetime > 0 and (time.time() - start)*f * 1000 > movetime:
                     break
 
-                if (time.time() - start) * 1000 > our_time/moves_remain:
+                if our_time>0 and ((time.time() - start)*f * 1000) > our_time/moves_remain:
                     break
 
                 if sdepth >= depth:
                     break
 
-            entry = searcher.tp_score.get((pos.key, sdepth, True))
-            m, s = searcher.tp_move.get(pos.key), entry.lower
+            m, s = _move, _score
             # We only resign once we are mated.. That's never?
             
             moves = moves.split(' ')

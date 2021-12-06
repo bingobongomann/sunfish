@@ -8,7 +8,8 @@ import CrazySunfish
 import chess
 import chess.variant
 import chess.polyglot
-from CrazySunfish import Position
+from CrazySunfish import StateKeyPair
+from CrazyAra.DeepCrazyhouse.src.domain.variants.game_state import GameState
 
 ################################################################################
 # This module contains functions used by test.py and xboard.py.
@@ -185,7 +186,7 @@ def parseCrazyFEN(fen):
     fen = fen.replace("[-]","[]")
     print('fen after replace: ', fen)
     board = chess.variant.CrazyhouseBoard(fen)
-    pos = Position(board, chess.polyglot.zobrist_hash(board))
+    pos = StateKeyPair(GameState(board), chess.polyglot.zobrist_hash(board))
     print('fen parsed')
     return pos
 
@@ -224,10 +225,11 @@ def parseMove(move):
 ################################################################################
 def crazypv(searcher, pos, include_scores=True):
     move = searcher.tp_move.get(pos.key)
+    print(move)
     res =[]
     while move is not None:
-        res.append(str(move)+' ')
-        pos = pos.move(move)
+        res.append(str(move))
+        pos = pos.apply_move(move)
         move = searcher.tp_move.get(pos.key)
     return ' '.join(res)
     
