@@ -64,12 +64,12 @@ class StateKeyPair(namedtuple('StateKeyPair', 'state, key')):
     def apply_move(self, move):
         #print(move)
         self.state.apply_move(move)
-        newpos= StateKeyPair(self.state, self.state.get_pythonchess_board().fen())# chess.polyglot.zobrist_hash(self.state.get_pythonchess_board()))
+        newpos= StateKeyPair(self.state, chess.polyglot.zobrist_hash(self.state.get_pythonchess_board()))
         return newpos
 
     def undo_move(self):
         self.state.board.pop()
-        newpos = StateKeyPair(self.state,self.state.get_pythonchess_board().fen())# chess.polyglot.zobrist_hash(self.state.get_pythonchess_board()))
+        newpos = StateKeyPair(self.state, chess.polyglot.zobrist_hash(self.state.get_pythonchess_board()))
         return newpos
 
 ###############################################################################
@@ -302,7 +302,7 @@ def printPosition(position):
 # User interface
 ###############################################################################
 def main():
-    hist = [StateKeyPair(GameState(INITIAL),INITIAL)]# chess.polyglot.zobrist_hash(INITIAL))]
+    hist = [StateKeyPair(GameState(INITIAL), chess.polyglot.zobrist_hash(INITIAL))]
     searcher = Searcher()
     while True:
         printPosition(hist[-1])

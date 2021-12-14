@@ -30,6 +30,8 @@ def main():
     print(newboard.pockets[chess.WHITE])
     newnewboard = board.copy()
     newnewboard.push_uci('f3g4')
+    newnewboard.pockets[chess.BLACK].add(5)
+    newnewboard.pockets[chess.BLACK].remove(5)
     print('Pocket Black:')
     print(newnewboard.pockets[chess.BLACK])
     print('_______________')

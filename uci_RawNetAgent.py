@@ -10,10 +10,12 @@ import time
 import logging
 import argparse
 
-from numpy.core.fromnumeric import repeat
-
 import tools
 from tools import WHITE, BLACK, Unbuffered
+sys.path.insert(0,'CrazyAra/')
+from CrazyAra.DeepCrazyhouse.src.domain.agent.neural_net_api import NeuralNetAPI
+from CrazyAra.DeepCrazyhouse.src.domain.agent.player.raw_net_agent import RawNetAgent
+from CrazyAra.DeepCrazyhouse.src.domain.variants.game_state import GameState
 
 def main():
     parser = argparse.ArgumentParser()
@@ -29,7 +31,6 @@ def main():
         logging.debug(line)
     pos = tools.parseCrazyFEN(tools.FEN_INITIAL_CRAZYHOUSE)
     searcher = Crazysunfish.Searcher()
-    history = [pos]
     color = WHITE
     our_time, opp_time = 1000, 1000 # time in centi-seconds
     show_thinking = True
@@ -47,8 +48,8 @@ def main():
             break
 
         elif smove == 'uci':
-            output('id name CrazySunfish')
-            output('id author Jannik Holmer, based on Sunfish by Thomas Ahle &contributers')
+            output('id name rawnetagent')
+            output('id author Jannik Holmer using the CrazyAra NN by Johannes Czech')
             output('option name UCI_Variant type combo default crazyhouse var crazyhouse')
             output('uciok')
 
@@ -86,16 +87,15 @@ def main():
                 pass
 
             pos = tools.parseCrazyFEN(fen)
-            history = [pos]
+
             for move in moveslist:
                 pos = pos.apply_move(tools.parseMove(move))
-                history.append(pos)
 
         elif smove.startswith('go'):
             #  default options
             depth = 1000
             movetime = -1
-            our_time = -1
+
             _, *params = smove.split(' ')
             for param, val in zip(*2*(iter(params),)):
                 if param == 'depth':
@@ -113,44 +113,29 @@ def main():
             oldtime = start
             f = 1
             ponder = None
-            for sdepth, _move, _score , nodes, T_hit, NN_evals in searcher.search(pos, history):
-                repetition = tools.repTest(pos, history)
-                moves = tools.crazypv(searcher, pos, sdepth,repetition, history)
-                newtime = time.time()
-                it_time = newtime -oldtime
-                if sdepth > 1:
-                    f_new = it_time/it_time_old
-                    f = max(f,f_new)
-                oldtime = newtime
-                it_time_old = it_time
+            batch_size = 1
+            threads = 1
 
-                if show_thinking:
-                    entry = searcher.tp_score.get((pos.key, repetition))
-                    score = entry.Score
-                    usedtime = int((time.time() - start)*1000)
-                    moves_str = moves if len(moves) < 15 else ''
-                    output('info depth {} score cp {} time {}ms nodes {} pv {}'.format(sdepth, score, usedtime, searcher.nodes, moves_str))
+            nets = []
+            for idx in range(2):
+                nets.append(NeuralNetAPI(ctx='cpu', batch_size=batch_size))
 
-                if len(moves) > 5:
-                    ponder = moves[1]
+            raw_agent = RawNetAgent(nets[0])
+            pred_value, legal_moves, p_vec_small , cp, depthnet, nodes, time_elapsed_s, nps, pv = raw_agent.evaluate_board_state(pos.state)
+            mergedlist = list(zip(legal_moves, p_vec_small))
+            moveList = sorted(mergedlist, key=lambda x:x[1], reverse=True)
 
-                if movetime > 0 and (time.time() - start)*f * 1000 > movetime:
-                    break
 
-                if our_time>0 and ((time.time() - start)*f * 1000) > our_time/moves_remain:
-                    break
 
-                if sdepth >= depth:
-                    break
+            if show_thinking:
+                score = pred_value
+                usedtime = int((time.time() - start) * 1000)
+                moves_str = ''
+                output('info depth {} score cp {} time {} nodes {} pv {}'.format(0, score, usedtime, searcher.nodes, moves_str))
 
-            m, s = _move, _score
             # We only resign once we are mated.. That's never?
-            
-            moves = moves.split(' ')
-            if len(moves) > 1:
-                output(f'bestmove {moves[0]} ponder {moves[1]}')
-            else:
-                output('bestmove ' + moves[0])
+        
+            output('bestmove ' + str(moveList[0][0]))
 
         elif smove.startswith('time'):
             our_time = int(smove.split()[1])
@@ -160,13 +145,6 @@ def main():
 
         else:
             pass
-
-def repTest(position, History):
-    for histpos in History:
-        if histpos.key == position.key:
-            return True
-    return False
-
 
 if __name__ == '__main__':
     main()

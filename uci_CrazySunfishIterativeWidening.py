@@ -10,30 +10,28 @@ import time
 import logging
 import argparse
 
-from numpy.core.fromnumeric import repeat
-
 import tools
 from tools import WHITE, BLACK, Unbuffered
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument('module', help='crazysunfish.py file (without .py)', type=str, default='CrazySunfish', nargs='?')
+    parser.add_argument('module', help='crazysunfishIterativeWidening.py file (without .py)', type=str, default='CrazySunfishIterativeWidening', nargs='?')
     args = parser.parse_args()
 
     Crazysunfish = importlib.import_module(args.module)
 
-    logging.basicConfig(filename='Crazysunfish.log', level=logging.DEBUG)
+    logging.basicConfig(filename='CrazysunfishIterativeWidening.log', level=logging.DEBUG)
     out = Unbuffered(sys.stdout)
     def output(line):
         print(line)
         logging.debug(line)
-    pos = tools.parseCrazyFEN(tools.FEN_INITIAL_CRAZYHOUSE)
+    pos = tools.parseCrazyFENIW(tools.FEN_INITIAL_CRAZYHOUSE)
     searcher = Crazysunfish.Searcher()
-    history = [pos]
     color = WHITE
     our_time, opp_time = 1000, 1000 # time in centi-seconds
     show_thinking = True
-
+    hist = []
+    repetition = False
     stack = []
     while True:
         if stack:
@@ -47,7 +45,7 @@ def main():
             break
 
         elif smove == 'uci':
-            output('id name CrazySunfish')
+            output('id name CrazySunfishIterativeWidening')
             output('id author Jannik Holmer, based on Sunfish by Thomas Ahle &contributers')
             output('option name UCI_Variant type combo default crazyhouse var crazyhouse')
             output('uciok')
@@ -85,11 +83,15 @@ def main():
             else:
                 pass
 
-            pos = tools.parseCrazyFEN(fen)
-            history = [pos]
+            pos = tools.parseCrazyFENIW(fen)
+            hist=[pos]
+            repetition = False
             for move in moveslist:
                 pos = pos.apply_move(tools.parseMove(move))
-                history.append(pos)
+                hist.append(pos)
+            for histpos in hist[:-1]:
+                if(histpos.key == pos.key):
+                    repetition = True
 
         elif smove.startswith('go'):
             #  default options
@@ -113,9 +115,9 @@ def main():
             oldtime = start
             f = 1
             ponder = None
-            for sdepth, _move, _score , nodes, T_hit, NN_evals in searcher.search(pos, history):
-                repetition = tools.repTest(pos, history)
-                moves = tools.crazypv(searcher, pos, sdepth,repetition, history)
+            for sdepth, _move, _score , nodes, T_hit, NN_evals in searcher.search(pos, hist):
+                moves = tools.crazypvIW(searcher, pos, sdepth, repetition, hist)
+
                 newtime = time.time()
                 it_time = newtime -oldtime
                 if sdepth > 1:
@@ -125,11 +127,9 @@ def main():
                 it_time_old = it_time
 
                 if show_thinking:
-                    entry = searcher.tp_score.get((pos.key, repetition))
-                    score = entry.Score
                     usedtime = int((time.time() - start)*1000)
-                    moves_str = moves if len(moves) < 15 else ''
-                    output('info depth {} score cp {} time {}ms nodes {} pv {}'.format(sdepth, score, usedtime, searcher.nodes, moves_str))
+                    moves_str = moves if len(moves) < 15 else ' '.join(moves.split(' ')[:3])
+                    output('info depth {} score cp  {} time {}ms nodes {} pv {}'.format(sdepth, _score, usedtime, searcher.nodes, moves_str))
 
                 if len(moves) > 5:
                     ponder = moves[1]
@@ -160,13 +160,6 @@ def main():
 
         else:
             pass
-
-def repTest(position, History):
-    for histpos in History:
-        if histpos.key == position.key:
-            return True
-    return False
-
 
 if __name__ == '__main__':
     main()
