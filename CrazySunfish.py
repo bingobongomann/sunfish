@@ -23,33 +23,31 @@ from CrazyAra.DeepCrazyhouse.src.domain.util import get_check_move_mask
 ###############################################################################
 
 
-initial = chess.variant.CrazyhouseBoard()
-
-
-# Mate value must be greater than 8*queen + 2*(rook+knight+bishop)
-# King value is set to twice this value such that if the opponent is
-# 8 queens up, but we got the king, we still exceed MATE_VALUE.
-# When a MATE is detected, we'll set the score to MATE_UPPER - plies to get there
-# E.g. Mate in 3 will be MATE_UPPER - 6
+INITIAL = chess.variant.CrazyhouseBoard()
 
 
 # The table size is the maximum number of elements in the transposition table.
 TABLE_SIZE = 1e7
 
+# An Entry from the Transposition Table
+# lower and upper are the bounds of the position
+# Score is the predicted Value from the NN_eval 
+# moveList contains the ordered tuples (move, P(move)) from the NN_eval ordered from highest to lowest or in case we had a bestmove in the TT it has been moved to the first position
+# depth is the depth to which the position has been searched 
+Entry = namedtuple('Entry', 'lower upper Score moveList depth' )
+
+
 # Constants for tuning search
-QS_LIMIT = 219
-EVAL_ROUGHNESS = 13
 DRAW_TEST = True
 ENHANCE_CHECKS = False
 ENHANCE_CAPTURES = False
 QUANTIL = 0.95
-
+# Constants for the NeuralNet-Evaluation
 batch_size = 1
 threads = 1
-
+#
 nets = []
-for idx in range(2):
-    nets.append(NeuralNetAPI(ctx='cpu', batch_size=batch_size))
+nets.append(NeuralNetAPI(ctx='cpu', batch_size=batch_size))
 
 raw_agent = RawNetAgent(nets[0])
 
@@ -64,9 +62,14 @@ class StateKeyPair(namedtuple('StateKeyPair', 'state, key')):
     key -- zobrist key of the position
     """
     def apply_move(self, move):
-        newstate = copy.deepcopy(self.state)
-        newstate.apply_move(move)
-        newpos= StateKeyPair(newstate, chess.polyglot.zobrist_hash(newstate.get_pythonchess_board()))
+        #print(move)
+        self.state.apply_move(move)
+        newpos= StateKeyPair(self.state, self.state.get_pythonchess_board().fen())# chess.polyglot.zobrist_hash(self.state.get_pythonchess_board()))
+        return newpos
+
+    def undo_move(self):
+        self.state.board.pop()
+        newpos = StateKeyPair(self.state,self.state.get_pythonchess_board().fen())# chess.polyglot.zobrist_hash(self.state.get_pythonchess_board()))
         return newpos
 
 ###############################################################################
@@ -74,7 +77,7 @@ class StateKeyPair(namedtuple('StateKeyPair', 'state, key')):
 ###############################################################################
 
 # lower <= s(pos) <= upper
-Entry = namedtuple('Entry', 'lower upper Score moveList depth' )
+
 
 class Searcher:
     def __init__(self):
@@ -91,7 +94,6 @@ class Searcher:
                 s(pos) <= r < gamma    if gamma > s(pos)
                 gamma <= r <= s(pos)   if gamma <= s(pos)"""
         self.nodes += 1
-        #print('nodes: ',self.nodes, ' move given: ', move_given)
         #print('Pocket Black:')
         #print(pos.state.get_pythonchess_board().pockets[chess.BLACK])
         #print('_______________')
@@ -108,8 +110,11 @@ class Searcher:
             return -1
         #we check for 3-fold repetition by comparing the zobrist hashes of our previously actually played positions 
         # if there is a match we call the actual draw check which would be very costly if called every time 
+        repetition = False
         if DRAW_TEST:
-            if(pos.key in histpos.key for histpos in self.history):
+            if repTest(pos, self.history):
+                #print('repetition')
+                repetition = True
                 if pos.state.is_draw():
                     return 0
                 
@@ -118,19 +123,19 @@ class Searcher:
         # We also need to be sure, that the stored search was over the same
         # nodes as the current search.
         # Entry ( Score, Move_order from NN, depth_of_search)TT only saves the highest depth search 
-        entry = self.tp_score.get((pos.key), None)
-        histmove = self.tp_move.get(pos.key)
+        entry = self.tp_score.get((pos.key,repetition))
+        histmove = self.tp_move.get((pos.key,repetition))
 
         if entry is not None:
             self.tablehits +=1
             if entry.depth >= depth:
                 if entry.lower >= gamma:
-                    print('lower:{} upper: {} move:{}'.format(entry.lower, entry.upper, histmove))
-                    print('lower bigger gamma')
+                    #print('lower:{} upper: {} move:{}'.format(entry.lower, entry.upper, histmove))
+                    #print('lower bigger gamma')
                     return entry.lower
                 if entry.upper < gamma:
-                    print('lower:{} upper: {} move:{}'.format(entry.lower, entry.upper, histmove))
-                    print('upper smaller gamma')
+                    #print('lower:{} upper: {} move:{}'.format(entry.lower, entry.upper, histmove))
+                    #print('upper smaller gamma')
                     return entry.upper
             pred_value = entry.Score
             moveList = entry.moveList
@@ -178,35 +183,38 @@ class Searcher:
 
 
 
-        def moves(sortedlist):
+        def moves(sortedlist, position, history):
             P_sum= 0   
-            for move in sortedlist:
-                if(P_sum<QUANTIL):
+            for idx, move in enumerate(sortedlist):
+                if(P_sum<QUANTIL and idx <15):
                     P_sum=P_sum + move[1]
                     #print('Psum:',P_sum)
-
-                        
-                    yield move[0], -self.bound(pos.apply_move(move[0]), -gamma, depth-1, root=False)
+                    position = position.apply_move(move[0])
+                    history.append(position)
+                    score =-self.bound(position, -gamma, depth-1, root=False)
+                    position.undo_move()
+                    history.pop()
+                    yield move[0], score
                 else:
                     break
 
 
         #leaf node => return the value of the position estimated by the NN      
         if depth == 0:
-            self.tp_score[pos.key] = Entry(-1,1,pred_value,moveList,0)
+            self.tp_score[(pos.key,repetition)] = Entry(-1,1,pred_value,moveList,0)
             return pred_value
         # Run through the moves, shortcutting when possible
         printmoves = []
         bestmove = None
         best = -1
-        for move, score in moves(moveList):
+        for move, score in moves(moveList, pos, self.history):
             #print('move:', move , 'score',score)
             printmoves.__add__([(move, score)])
             best = max(best, score)
             if best == score:
                 bestmove = move
             if score >gamma:
-                print('newbest', move, ':', score, 'depth',depth)
+                #print('newbest', move, ':', score, 'depth',depth)
                 
                 break
                 
@@ -214,7 +222,7 @@ class Searcher:
         if len(self.tp_move) > TABLE_SIZE: self.tp_move.clear()
         # Save the move for pv construction and killer heuristic
         #print('move:', move, 'is better than gamma with ', score, ' / ', gamma)
-        self.tp_move[pos.key] = bestmove        
+        self.tp_move[(pos.key,repetition)] = bestmove        
                 
 
         # Clear before setting, so we always have a value
@@ -233,9 +241,9 @@ class Searcher:
         #    best = lower
         if depth>= tmpdepth:
             if best >= gamma:
-                self.tp_score[pos.key] = Entry(best, upper, best, moveList, depth)
+                self.tp_score[(pos.key,repetition)] = Entry(best, upper, pred_value, moveList, depth)
             if best < gamma:
-                self.tp_score[pos.key] = Entry(lower, best, best, moveList, depth)
+                self.tp_score[(pos.key,repetition)] = Entry(lower, best, pred_value, moveList, depth)
 
         return best
 
@@ -248,14 +256,14 @@ class Searcher:
             self.history = history
             # print('# Clearing table due to new history')
             self.tp_score.clear()
-
+        repetition = False
+        if repTest(pos, self.history):
+            repetition = True
         # In finished games, we could potentially go far enough to cause a recursion
         # limit exception. Hence we bound the ply.
         for depth in range(1, 200):
             # The inner loop is a binary search on the score of the position.
             # Inv: lower <= score <= upper
-            # 'while lower != upper' would work, but play tests show a margin of 20 plays
-            # better.
             lower, upper = -1, +1
             self.tablehits =0
             while lower < upper:
@@ -274,28 +282,30 @@ class Searcher:
             #print('Lower:', lower, 'Upper:', upper, 'Gamma:', gamma, 'score:', score, 'bounds: ',bounds)
             # If the game hasn't finished we can retrieve our move from the
             # transposition table.
-            yield depth, self.tp_move.get(pos.key), self.tp_score.get(pos.key).Score, self.nodes, self.tablehits, self.NN_evals
+            yield depth, self.tp_move.get((pos.key,repetition)), self.tp_score.get((pos.key,repetition)).lower, self.nodes, self.tablehits, self.NN_evals
 
+def repTest(position, History):
+    for histpos in History:
+        if histpos.key == position.key:
+            return True
+    return False
+
+def printPosition(position):
+    print('Pocket Black:')
+    print(position.state.get_pythonchess_board().pockets[chess.BLACK])
+    print('_______________')
+    print(position.state.get_pythonchess_board())
+    print('Pocket White:')
+    print(position.state.get_pythonchess_board().pockets[chess.WHITE])
 
 ###############################################################################
 # User interface
 ###############################################################################
-
-# Python 2 compatability
-if sys.version_info[0] == 2:
-    input = raw_input
-
-
 def main():
-    hist = [StateKeyPair(GameState(initial), chess.polyglot.zobrist_hash(initial))]
+    hist = [StateKeyPair(GameState(INITIAL),INITIAL)]# chess.polyglot.zobrist_hash(INITIAL))]
     searcher = Searcher()
     while True:
-        print('Pocket Black:')
-        print(hist[-1].state.get_pythonchess_board().pockets[chess.BLACK])
-        print('_______________')
-        print(hist[-1].state.get_pythonchess_board())
-        print('Pocket White:')
-        print(hist[-1].state.get_pythonchess_board().pockets[chess.WHITE])
+        printPosition(hist[-1])
 
         if hist[-1].state.is_loss():
             print("You lost")
@@ -313,16 +323,12 @@ def main():
                 # Inform the user when invalid input (e.g. "help") is entered
                 print("Please enter a move like g8f6")
         
-        hist.append(hist[-1].apply_move(pymove))
+        hist.append(copy.deepcopy(hist[-1]).apply_move(pymove))
 
         # After our move we rotate the board and print it again.
         # This allows us to see the effect of our move.
-        print('Pocket Black:')
-        print(hist[-1].state.get_pythonchess_board().pockets[chess.BLACK])
-        print('_______________')
-        print(hist[-1].state.get_pythonchess_board())
-        print('Pocket White:')
-        print(hist[-1].state.get_pythonchess_board().pockets[chess.WHITE])
+        printPosition(hist[-1])
+        print(hist.__len__())
 
         if hist[-1].state.is_loss():
             print("You won")
@@ -347,13 +353,13 @@ def main():
             print('Nodes Searched:',nodes, 'score:', score, 'NN evals:', NN_evals, 'time', time.time()-start)
 
             #if (time.time() - start)*f > 30 or score==1:
-            if(_depth==7):
+            if(_depth==5):
                 break
         
 
 
         print("My move:", move)
-        hist.append(hist[-1].apply_move(move))
+        hist.append(copy.deepcopy(hist[-1]).apply_move(move))
 
 if __name__ == '__main__':
     main()
