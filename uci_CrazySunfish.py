@@ -10,6 +10,8 @@ import time
 import logging
 import argparse
 
+from numpy.core.fromnumeric import repeat
+
 import tools
 from tools import WHITE, BLACK, Unbuffered
 
@@ -27,6 +29,7 @@ def main():
         logging.debug(line)
     pos = tools.parseCrazyFEN(tools.FEN_INITIAL_CRAZYHOUSE)
     searcher = Crazysunfish.Searcher()
+    history = [pos]
     color = WHITE
     our_time, opp_time = 1000, 1000 # time in centi-seconds
     show_thinking = True
@@ -83,9 +86,10 @@ def main():
                 pass
 
             pos = tools.parseCrazyFEN(fen)
-
+            history = [pos]
             for move in moveslist:
                 pos = pos.apply_move(tools.parseMove(move))
+                history.append(pos)
 
         elif smove.startswith('go'):
             #  default options
@@ -109,9 +113,9 @@ def main():
             oldtime = start
             f = 1
             ponder = None
-            for sdepth, _move, _score , nodes, T_hit, NN_evals in searcher.search(pos):
-                moves = tools.crazypv(searcher, pos, include_scores=False)
-
+            for sdepth, _move, _score , nodes, T_hit, NN_evals in searcher.search(pos, history):
+                repetition = tools.repTest(pos, history)
+                moves = tools.crazypv(searcher, pos, sdepth,repetition, history)
                 newtime = time.time()
                 it_time = newtime -oldtime
                 if sdepth > 1:
@@ -121,7 +125,7 @@ def main():
                 it_time_old = it_time
 
                 if show_thinking:
-                    entry = searcher.tp_score.get(pos.key)
+                    entry = searcher.tp_score.get((pos.key, repetition))
                     score = entry.Score
                     usedtime = int((time.time() - start)*1000)
                     moves_str = moves if len(moves) < 15 else ''
@@ -156,6 +160,13 @@ def main():
 
         else:
             pass
+
+def repTest(position, History):
+    for histpos in History:
+        if histpos.key == position.key:
+            return True
+    return False
+
 
 if __name__ == '__main__':
     main()

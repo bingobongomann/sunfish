@@ -9,6 +9,7 @@ import chess
 import chess.variant
 import chess.polyglot
 from CrazySunfish import StateKeyPair
+from CrazySunfishIterativeWidening import StateKeyPairIW
 from CrazyAra.DeepCrazyhouse.src.domain.variants.game_state import GameState
 
 ################################################################################
@@ -186,7 +187,15 @@ def parseCrazyFEN(fen):
     fen = fen.replace("[-]","[]")
     print('fen after replace: ', fen)
     board = chess.variant.CrazyhouseBoard(fen)
-    pos = StateKeyPair(GameState(board), chess.polyglot.zobrist_hash(board))
+    pos = StateKeyPair(GameState(board),fen)# chess.polyglot.zobrist_hash(board))
+    print('fen parsed')
+    return pos
+
+def parseCrazyFENIW(fen):
+    fen = fen.replace("[-]","[]")
+    print('fen after replace: ', fen)
+    board = chess.variant.CrazyhouseBoard(fen)
+    pos = StateKeyPairIW(GameState(board),fen)# chess.polyglot.zobrist_hash(board))
     print('fen parsed')
     return pos
 
@@ -223,16 +232,43 @@ def parseMove(move):
 ################################################################################
 # Pretty print
 ################################################################################
-def crazypv(searcher, pos, include_scores=True):
-    move = searcher.tp_move.get(pos.key)
-    print(move)
+def crazypv(searcher, pos, depth, repetition, history):
+    move = searcher.tp_move.get((pos.key, repetition))
+    #print(move)
     res =[]
-    while move is not None:
+    tmpdepth = depth
+    while move is not None and tmpdepth>0:
         res.append(str(move))
         pos = pos.apply_move(move)
-        move = searcher.tp_move.get(pos.key)
+        history.append(pos)
+        repetition = repTest(pos, history)
+        move = searcher.tp_move.get((pos.key, repetition))
+        #print(move)
+        tmpdepth -=1
+    for i in range(res.__len__()):
+        pos = pos.undo_move()
+        history.pop()
     return ' '.join(res)
-    
+
+def crazypvIW(searcher, pos, depth, repetition, hist):
+    move = searcher.tp_move.get((pos.key, repetition))
+    #print(move)
+    res =[]
+    tmpdepth = depth
+    while move is not None and tmpdepth>0:
+        repetition = False
+        pos = pos.apply_move(move)
+        hist.append(pos)
+        res.append(str(move))
+        for histpos in hist[:-1]:
+            if(histpos.key == pos.key):
+                repetition = True
+        move = searcher.tp_move.get((pos.key, repetition))
+        #print(move)
+        tmpdepth -=1
+    for i in range(res.__len__()):
+        pos = pos.undo_move() 
+    return ' '.join(res)
 
 def pv(searcher, pos, include_scores=True, include_loop=False):
     res = []
@@ -286,6 +322,11 @@ def flatten_tree(tree, depth):
         for pos in flatten_tree(subtree, depth-1):
             yield pos
 
+def repTest(position, History):
+    for histpos in History:
+        if histpos.key == position.key:
+            return True
+    return False
 ################################################################################
 # Non chess related tools
 ################################################################################
