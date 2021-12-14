@@ -4,6 +4,13 @@ import time
 import sys
 
 import sunfish
+import CrazySunfish
+import chess
+import chess.variant
+import chess.polyglot
+from CrazySunfish import StateKeyPair
+from CrazySunfishIterativeWidening import StateKeyPairIW
+from CrazyAra.DeepCrazyhouse.src.domain.variants.game_state import GameState
 
 ################################################################################
 # This module contains functions used by test.py and xboard.py.
@@ -15,6 +22,7 @@ import sunfish
 WHITE, BLACK = range(2)
 
 FEN_INITIAL = 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1'
+FEN_INITIAL_CRAZYHOUSE = chess.variant.CrazyhouseBoard().starting_fen
 
 
 def search(searcher, pos, secs, history=()):
@@ -123,7 +131,8 @@ def parseSAN(pos, msan):
         'p':p, 'src':src, 'dst': dst, 'mvs':list(gen_legal_moves(pos))})
 
 def readPGN(file):
-    """ Yields a number of [(pos, move), ...] lists. """
+    """ Yields a number of [(    CrazySunfish.Position()
+pos, move), ...] lists. """
     def _parse_single_pgn(lines):
         # Remove comments and numbers.
         parts = re.sub('{.*?}', '', ' '.join(lines)).split()
@@ -174,6 +183,22 @@ def parseFEN(fen):
     pos = sunfish.Position(board, score, wc, bc, ep, 0)
     return pos if color == 'w' else pos.rotate()
 
+def parseCrazyFEN(fen):
+    fen = fen.replace("[-]","[]")
+    print('fen after replace: ', fen)
+    board = chess.variant.CrazyhouseBoard(fen)
+    pos = StateKeyPair(GameState(board),fen)# chess.polyglot.zobrist_hash(board))
+    print('fen parsed')
+    return pos
+
+def parseCrazyFENIW(fen):
+    fen = fen.replace("[-]","[]")
+    print('fen after replace: ', fen)
+    board = chess.variant.CrazyhouseBoard(fen)
+    pos = StateKeyPairIW(GameState(board),fen)# chess.polyglot.zobrist_hash(board))
+    print('fen parsed')
+    return pos
+
 def renderFEN(pos, half_move_clock=0, full_move_clock=1):
     color = 'wb'[get_color(pos)]
     if get_color(pos) == BLACK:
@@ -201,10 +226,49 @@ def parseEPD(epd, opt_dict=False):
     if opt_dict:
         opts = dict(p.split(maxsplit=1) for p in opts)
     return fen, opts
+def parseMove(move):
+    return chess.Move.from_uci(move)
 
 ################################################################################
 # Pretty print
 ################################################################################
+def crazypv(searcher, pos, depth, repetition, history):
+    move = searcher.tp_move.get((pos.key, repetition))
+    #print(move)
+    res =[]
+    tmpdepth = depth
+    while move is not None and tmpdepth>0:
+        res.append(str(move))
+        pos = pos.apply_move(move)
+        history.append(pos)
+        repetition = repTest(pos, history)
+        move = searcher.tp_move.get((pos.key, repetition))
+        #print(move)
+        tmpdepth -=1
+    for i in range(res.__len__()):
+        pos = pos.undo_move()
+        history.pop()
+    return ' '.join(res)
+
+def crazypvIW(searcher, pos, depth, repetition, hist):
+    move = searcher.tp_move.get((pos.key, repetition))
+    #print(move)
+    res =[]
+    tmpdepth = depth
+    while move is not None and tmpdepth>0:
+        repetition = False
+        pos = pos.apply_move(move)
+        hist.append(pos)
+        res.append(str(move))
+        for histpos in hist[:-1]:
+            if(histpos.key == pos.key):
+                repetition = True
+        move = searcher.tp_move.get((pos.key, repetition))
+        #print(move)
+        tmpdepth -=1
+    for i in range(res.__len__()):
+        pos = pos.undo_move() 
+    return ' '.join(res)
 
 def pv(searcher, pos, include_scores=True, include_loop=False):
     res = []
@@ -258,6 +322,11 @@ def flatten_tree(tree, depth):
         for pos in flatten_tree(subtree, depth-1):
             yield pos
 
+def repTest(position, History):
+    for histpos in History:
+        if histpos.key == position.key:
+            return True
+    return False
 ################################################################################
 # Non chess related tools
 ################################################################################

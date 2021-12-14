@@ -11,32 +11,27 @@ import logging
 import argparse
 
 import tools
-import sunfish
-
 from tools import WHITE, BLACK, Unbuffered
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument('module', help='sunfish.py file (without .py)', type=str, default='sunfish', nargs='?')
-    parser.add_argument('--tables', metavar='pst', help='alternative pst table', type=str, default=None)
+    parser.add_argument('module', help='crazysunfishIterativeWidening.py file (without .py)', type=str, default='CrazySunfishIterativeWidening', nargs='?')
     args = parser.parse_args()
 
-    sunfish = importlib.import_module(args.module)
-    if args.tables is not None:
-        pst_module = importlib.import_module(args.tables)
-        sunfish.pst = pst_module.pst
+    Crazysunfish = importlib.import_module(args.module)
 
-    logging.basicConfig(filename='sunfish.log', level=logging.DEBUG)
+    logging.basicConfig(filename='CrazysunfishIterativeWidening.log', level=logging.DEBUG)
     out = Unbuffered(sys.stdout)
     def output(line):
-        print(line, file=out)
+        print(line)
         logging.debug(line)
-    pos = tools.parseFEN(tools.FEN_INITIAL)
-    searcher = sunfish.Searcher()
+    pos = tools.parseCrazyFENIW(tools.FEN_INITIAL_CRAZYHOUSE)
+    searcher = Crazysunfish.Searcher()
     color = WHITE
     our_time, opp_time = 1000, 1000 # time in centi-seconds
     show_thinking = True
-
+    hist = []
+    repetition = False
     stack = []
     while True:
         if stack:
@@ -50,15 +45,16 @@ def main():
             break
 
         elif smove == 'uci':
-            output('id name Sunfish')
-            output('id author Thomas Ahle & Contributors')
+            output('id name CrazySunfishIterativeWidening')
+            output('id author Jannik Holmer, based on Sunfish by Thomas Ahle &contributers')
+            output('option name UCI_Variant type combo default crazyhouse var crazyhouse')
             output('uciok')
 
         elif smove == 'isready':
             output('readyok')
 
         elif smove == 'ucinewgame':
-            stack.append('position fen ' + tools.FEN_INITIAL)
+            stack.append('position fen ' + tools.FEN_INITIAL_CRAZYHOUSE)
 
         # syntax specified in UCI
         # position [fen  | startpos ]  moves  ....
@@ -79,6 +75,7 @@ def main():
                     fenpart = smove
 
                 _, _, fen = fenpart.split(' ', 2)
+                print(fen)
 
             elif params[1] == 'startpos':
                 fen = tools.FEN_INITIAL
@@ -86,18 +83,21 @@ def main():
             else:
                 pass
 
-            pos = tools.parseFEN(fen)
-            color = WHITE if fen.split()[1] == 'w' else BLACK
-
+            pos = tools.parseCrazyFENIW(fen)
+            hist=[pos]
+            repetition = False
             for move in moveslist:
-                pos = pos.move(tools.mparse(color, move))
-                color = 1 - color
+                pos = pos.apply_move(tools.parseMove(move))
+                hist.append(pos)
+            for histpos in hist[:-1]:
+                if(histpos.key == pos.key):
+                    repetition = True
 
         elif smove.startswith('go'):
             #  default options
             depth = 1000
             movetime = -1
-
+            our_time = -1
             _, *params = smove.split(' ')
             for param, val in zip(*2*(iter(params),)):
                 if param == 'depth':
@@ -112,40 +112,45 @@ def main():
             moves_remain = 40
 
             start = time.time()
+            oldtime = start
+            f = 1
             ponder = None
-            for sdepth, _move, _score in searcher.search(pos):
-                moves = tools.pv(searcher, pos, include_scores=False)
+            for sdepth, _move, _score , nodes, T_hit, NN_evals in searcher.search(pos, hist):
+                moves = tools.crazypvIW(searcher, pos, sdepth, repetition, hist)
+
+                newtime = time.time()
+                it_time = newtime -oldtime
+                if sdepth > 1:
+                    f_new = it_time/it_time_old
+                    f = max(f,f_new)
+                oldtime = newtime
+                it_time_old = it_time
 
                 if show_thinking:
-                    entry = searcher.tp_score.get((pos, sdepth, True))
-                    score = int(round((entry.lower + entry.upper)/2))
-                    usedtime = int((time.time() - start) * 1000)
-                    moves_str = moves if len(moves) < 100 else ''
-                    output('info depth {} score cp {} time {} nodes {} pv {}'.format(sdepth, score, usedtime, searcher.nodes, moves_str))
+                    usedtime = int((time.time() - start)*1000)
+                    moves_str = moves if len(moves) < 15 else ' '.join(moves.split(' ')[:3])
+                    output('info depth {} score cp  {} time {}ms nodes {} pv {}'.format(sdepth, _score, usedtime, searcher.nodes, moves_str))
 
                 if len(moves) > 5:
                     ponder = moves[1]
 
-                if movetime > 0 and (time.time() - start) * 1000 > movetime:
+                if movetime > 0 and (time.time() - start)*f * 1000 > movetime:
                     break
 
-                if (time.time() - start) * 1000 > our_time/moves_remain:
+                if our_time>0 and ((time.time() - start)*f * 1000) > our_time/moves_remain:
                     break
 
                 if sdepth >= depth:
                     break
 
-            entry = searcher.tp_score.get((pos, sdepth, True))
-            m, s = searcher.tp_move.get(pos), entry.lower
+            m, s = _move, _score
             # We only resign once we are mated.. That's never?
-            if s == -sunfish.MATE_UPPER:
-                output('resign')
+            
+            moves = moves.split(' ')
+            if len(moves) > 1:
+                output(f'bestmove {moves[0]} ponder {moves[1]}')
             else:
-                moves = moves.split(' ')
-                if len(moves) > 1:
-                    output(f'bestmove {moves[0]} ponder {moves[1]}')
-                else:
-                    output('bestmove ' + moves[0])
+                output('bestmove ' + moves[0])
 
         elif smove.startswith('time'):
             our_time = int(smove.split()[1])
