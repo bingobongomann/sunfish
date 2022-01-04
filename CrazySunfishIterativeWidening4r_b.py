@@ -42,7 +42,7 @@ EVAL_ROUGHNESS = 13
 DRAW_TEST = True
 ENHANCE_CHECKS = False
 ENHANCE_CAPTURES = False
-QUANTILS = [0,0.75,0.95,0.99, 1]
+QUANTILS = [0,0.75,0.85,0.95,0.99]
 
 batch_size = 1
 threads = 1
@@ -192,9 +192,11 @@ class Searcher:
 
 
         def moves(sortedlist, pos):
-            P_sum= 0   
+            P_sum= 0
+            Q_bound = QUANTILS[Q_idx]
+            if(root): Q_bound =1   
             for idx, move in enumerate(sortedlist):
-                if(P_sum<QUANTILS[Q_idx]):
+                if(P_sum<Q_bound):
                     P_sum=P_sum + move[1]
                     #print('Psum:',P_sum)
                     #print(move[0])

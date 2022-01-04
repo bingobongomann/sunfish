@@ -42,7 +42,7 @@ EVAL_ROUGHNESS = 13
 DRAW_TEST = True
 ENHANCE_CHECKS = False
 ENHANCE_CAPTURES = False
-QUANTILS = [0,0.75,0.95,0.99, 1]
+QUANTILS = [0,0.5,0.75,0.9, 1]
 
 batch_size = 1
 threads = 1

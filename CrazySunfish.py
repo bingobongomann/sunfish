@@ -41,7 +41,8 @@ Entry = namedtuple('Entry', 'lower upper Score moveList depth' )
 DRAW_TEST = True
 ENHANCE_CHECKS = False
 ENHANCE_CAPTURES = False
-QUANTIL = 0.95
+#at depth 0 the quantil doesnt matter
+QUANTILS = [0,0.75,0.95,0.99,1]
 # Constants for the NeuralNet-Evaluation
 batch_size = 1
 threads = 1
@@ -104,7 +105,6 @@ class Searcher:
         # calmness, and from this point on there is no difference in behaviour depending on
         # depth, so so there is no reason to keep different depths in the transposition table.
         depth = max(depth, 0)
-
         
         if pos.state.is_loss():
             return -1
@@ -183,10 +183,10 @@ class Searcher:
 
 
 
-        def moves(sortedlist, position, history):
+        def moves(sortedlist, position, history, Quantil):
             P_sum= 0   
-            for idx, move in enumerate(sortedlist):
-                if(P_sum<QUANTIL and idx <15):
+            for move in sortedlist:
+                if(P_sum<Quantil):
                     P_sum=P_sum + move[1]
                     #print('Psum:',P_sum)
                     position = position.apply_move(move[0])
@@ -207,7 +207,9 @@ class Searcher:
         printmoves = []
         bestmove = None
         best = -1
-        for move, score in moves(moveList, pos, self.history):
+        qidx = min(depth,QUANTILS.__len__()-1)
+
+        for move, score in moves(moveList, pos, self.history, QUANTILS[qidx]):
             #print('move:', move , 'score',score)
             printmoves.__add__([(move, score)])
             best = max(best, score)
