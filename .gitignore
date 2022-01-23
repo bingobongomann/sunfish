@@ -2,7 +2,7 @@
 
 # Sunfish files
 *.log
-*.txt
+
 PGN_Out
 
 # C extensions
