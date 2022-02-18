@@ -53,10 +53,10 @@ main_config = {
     # The architecture dir contains the architecture definition of the network in mxnet .symbol format
     # These directories are used for inference
     #"model_architecture_dir": "/home/jannik/Bachelorarbeit/Models/Standard/symbol/",
-    "model_architecture_dir": "/home/jannik/Bachelorarbeit/Models/Crazyhouse/symbol/",
+    "model_architecture_dir": "/ModelsAndParams/ModelsAndParams/Crazyhouse/symbol/",
 
     # the weight directory contains the of the network in mxnet .params format
-    "model_weights_dir": "/home/jannik/Bachelorarbeit/Models/Crazyhouse/param/",
+    "model_weights_dir": "/ModelsAndParams/ModelsAndParams/Crazyhouse/param/",
     #"model_weights_dir": "/home/jannik/Bachelorarbeit/Models/Standard/param/",
 
     # layer name of the value output layer (e.g. value_tanh0 for legacy crazyhouse networks and value_out for newer

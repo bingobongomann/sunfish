@@ -49,7 +49,7 @@ threads = 1
 
 nets = []
 for idx in range(2):
-    nets.append(NeuralNetAPI(ctx='cpu', batch_size=batch_size))
+    nets.append(NeuralNetAPI(ctx='gpu', batch_size=batch_size))
 
 raw_agent = RawNetAgent(nets[0])
 
