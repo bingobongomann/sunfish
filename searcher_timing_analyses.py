@@ -1,11 +1,11 @@
 from collections import namedtuple
-from concurrent.futures import ThreadPoolExecutor, thread
+from concurrent.futures import ThreadPoolExecutor
 from multiprocessing import Pipe
 import threading
 from time import time
 import chess.variant
-import chess
 import numpy as np
+import yappi
 from splitpoint import SplitPoint
 import sys
 sys.path.insert(0,'CrazyAra/')
@@ -15,7 +15,7 @@ from CrazyAra.DeepCrazyhouse.src.domain.agent.player.util.net_pred_service impor
 from CrazyAra.DeepCrazyhouse.src.domain.variants.constants import BOARD_HEIGHT, BOARD_WIDTH, NB_CHANNELS_TOTAL, NB_LABELS
 from CrazyAra.DeepCrazyhouse.src.domain.variants.output_representation import get_probs_of_move_list, value_to_centipawn
 
-QUANTILS = [0,0.5,0.75,0.9,0.99,1]
+QUANTILS = [0,0.5,0.75,1]
 DTYPE = np.float32 
 
 #TODO: include self written history of positions for easy and cheap repetiton and draw detection
@@ -74,6 +74,13 @@ class Searcher():
         self.t_TT_score = np.zeros(threads)
         self.t_NN_eval = np.zeros(threads)
         self.t_split = np.zeros(threads)
+        #start worker threads 
+        futures = []
+        executor = ThreadPoolExecutor(max_workers=self.threads-1)
+        for i in range(1,self.threads):
+            futures.append(
+                executor.submit(self.idle_loop,threadID=i, splitpoint=None )
+            )
 
 
     # This is the function being called by the UCI Interface
@@ -97,13 +104,7 @@ class Searcher():
             for move in movelist:
                 board.push(move)
         TTKey = self.getTTKey(board)
-        #start worker threads 
-        futures = []
-        executor = ThreadPoolExecutor(max_workers=self.threads-1)
-        for i in range(1,self.threads):
-            futures.append(
-                executor.submit(self.idle_loop,threadID=i, splitpoint=None )
-            )
+        
         print("hello")
         # iterative deepening search 
         for It_depth in range(1, 200):
@@ -184,6 +185,7 @@ class Searcher():
         #while the list is not empty keep searching
         while moveList:
             move = moveList.pop(0)
+            len = moveList.__len__()
             board.push(move)
             score = -self.search(board, -beta, -alpha, depth-1, threadID)
             board.pop()
@@ -195,17 +197,18 @@ class Searcher():
 
             #if other threads are available to help, make a splitnode from this position and split the work
             #print(self.ThreadAccess.locked())
-            if depth >=2 and self.ThreadAccess.acquire(False):
+            if depth >=3 and len >1 and self.ThreadAccess.acquire(False):
                 #print("lock acquired")
-                IDs = self.idle_threads(threadID)
+                IDs = self.idle_threads(threadID, len-1)
                 #print(IDs)
+                self.ThreadAccess.release()
                 if(IDs):
                     t_split_start = time()
                     s = SplitPoint(board,moveList,depth,alpha,beta, threadID, bestmove)
                     self.split(s, IDs, t_split_start)
                     self.TT_Score[TTkey] = Score_Entry(s.alpha, s.bestmove, depth)
                     return s.alpha #??? should be right, just break should return the old alpha and disregard the splitsearch
-                self.ThreadAccess.release()
+                
                 #print("lock released")
                     
         self.TT_Score[TTkey] = Score_Entry(alpha, bestmove, depth)
@@ -221,7 +224,6 @@ class Searcher():
         #print(f"split work to these threads {IDs}")
         for threadID in IDs :
             self.assign_work(threadID, splitpoint)
-        self.ThreadAccess.release()
         #print("lock released")
         self.assign_work(splitpoint.masterID, splitpoint)
         self.idle_loop(splitpoint.masterID, splitpoint)
@@ -272,19 +274,22 @@ class Searcher():
     #checks the list of ilde threads for viable slaves for ThreadID
     # removes all viable ones from the list and returns their ids to split() 
     # idle masters of splitpoints can only help their own slaves "helpful master concept"
-    def idle_threads(self, threadID):
+    def idle_threads(self, threadID, maxnum):
         viableIDs = []
         #print(f"idle_threads: {self.IdleThreads}")
         for i in range(self.threads):
+            if maxnum==0: break
             tuple = self.IdleThreads[i]
             if tuple:
                 if tuple[1]:
                     if threadID in tuple[1].slaveIDs:
                         self.IdleThreads[i] = None
                         viableIDs.append(i)
+                        maxnum -=1
                 else:
                     self.IdleThreads[i] = None
                     viableIDs.append(i)
+                    maxnum-=1
         #print(viableIDs)
         return viableIDs
 
@@ -361,10 +366,11 @@ class Searcher():
 
 #testscript when this file is run by itself and not imported
 if __name__ == "__main__":
+    yappi.start()
     board = chess.variant.CrazyhouseBoard()
     movelist = None
-    netapi = NeuralNetAPI(ctx="gpu",batch_size=8)
-    s = Searcher(16,8,netapi)
+    netapi = NeuralNetAPI(ctx="gpu",batch_size=1)
+    s = Searcher(4,1,netapi)
     for depth, move, score, searchtime, nodes in s.searchPosition(board.fen(),movelist):
         print(f"depth: {depth}, selected move: {move}, score: {score}, time needed: {searchtime}, nodes searched: {nodes}")
         print(f"t_NN_eval: {s.t_NN_eval},\nt_TT_NN: {s.t_TT_NN},\nt_TT_Score: {s.t_TT_score}")
@@ -372,3 +378,8 @@ if __name__ == "__main__":
         print(f"splits: {s.splits}, splitting times: {s.t_split}")
         print("\n")
         if depth == 5: break
+
+    threads = yappi.get_thread_stats()
+    for thread in threads:
+        print(f"stats for yappi-thread: {thread.id}")
+        yappi.get_func_stats(ctx_id=thread.id).print_all()
