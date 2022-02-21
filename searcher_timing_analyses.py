@@ -5,6 +5,7 @@ import threading
 from time import time
 import chess.variant
 import numpy as np
+import queue
 import yappi
 from splitpoint import SplitPoint
 import sys
@@ -45,7 +46,7 @@ class Searcher():
         self.Tablehits_Score = 0
         self.Tablehits_Score_greater_depth = 0
         self.IdleThreads = [None]*threads
-        self.work = {}
+        self.work_queues = []
         self.stop = {}
         self.ThreadAccess = threading.Lock()
         self.net = net
@@ -55,6 +56,11 @@ class Searcher():
         pipe_endings_external = []
     
         for i in range(threads):
+            #create work Queues for splitting work between threads
+            workqueue = queue.Queue()
+            self.work_queues.append(workqueue)
+
+            #create pipe endings for us and the prediction service 
             ending1, ending2 = Pipe()
             self.my_pipe_endings.append(ending1)
             pipe_endings_external.append(ending2)
@@ -197,7 +203,7 @@ class Searcher():
 
             #if other threads are available to help, make a splitnode from this position and split the work
             #print(self.ThreadAccess.locked())
-            if depth >=3 and len >1 and self.ThreadAccess.acquire(False):
+            if depth >=2 and len >5 and self.ThreadAccess.acquire(False):
                 #print("lock acquired")
                 IDs = self.idle_threads(threadID, len-1)
                 #print(IDs)
@@ -224,10 +230,10 @@ class Searcher():
         #print(f"split work to these threads {IDs}")
         for threadID in IDs :
             self.assign_work(threadID, splitpoint)
-        #print("lock released")
         self.assign_work(splitpoint.masterID, splitpoint)
-        self.idle_loop(splitpoint.masterID, splitpoint)
         self.t_split[splitpoint.masterID] += time() - starttime
+        self.idle_loop(splitpoint.masterID, splitpoint)
+        
 
 
     # idle_loop in which threads go when they have nothing to do,
@@ -237,14 +243,21 @@ class Searcher():
             self.set_idle(threadID,None)
             #print(f"thread {threadID} idle")
         while True:
-            if self.assigned_work(threadID):
-                self.splitpoint_search(self.retrieve_work(threadID), threadID)
+
+            if splitpoint is not None:
+                try:
+                    work = self.work_queues[threadID].get(False)
+                    self.splitpoint_search(work, threadID)
+                except queue.Empty:
+                    pass
+                if splitpoint.activeThreadCount == 0:
+                    break
+            else:
+                work = self.work_queues[threadID].get()
+                self.splitpoint_search(work, threadID)
                 self.reset_stop(threadID)
                 self.set_idle(threadID, splitpoint)
 
-            
-            if splitpoint is not None and splitpoint.activeThreadCount == 0:
-                break
 
 
 
@@ -257,20 +270,7 @@ class Searcher():
 
     def assign_work(self, threadID, splitpoint):
         splitpoint.slaveIDs.append(threadID)
-        self.work[threadID] = splitpoint
-
-    
-    def assigned_work(self, threadID):
-        work = self.work.get(threadID)
-        if work:
-            return True
-        return False
-
-
-    def retrieve_work(self, threadID):
-        work = self.work.get(threadID)
-        self.work[threadID] = None
-        return work
+        self.work_queues[threadID].put(splitpoint)
     #checks the list of ilde threads for viable slaves for ThreadID
     # removes all viable ones from the list and returns their ids to split() 
     # idle masters of splitpoints can only help their own slaves "helpful master concept"
@@ -369,8 +369,8 @@ if __name__ == "__main__":
     yappi.start()
     board = chess.variant.CrazyhouseBoard()
     movelist = None
-    netapi = NeuralNetAPI(ctx="gpu",batch_size=1)
-    s = Searcher(4,1,netapi)
+    netapi = NeuralNetAPI(ctx="gpu",batch_size=8)
+    s = Searcher(16,8,netapi)
     for depth, move, score, searchtime, nodes in s.searchPosition(board.fen(),movelist):
         print(f"depth: {depth}, selected move: {move}, score: {score}, time needed: {searchtime}, nodes searched: {nodes}")
         print(f"t_NN_eval: {s.t_NN_eval},\nt_TT_NN: {s.t_TT_NN},\nt_TT_Score: {s.t_TT_score}")
