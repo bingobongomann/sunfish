@@ -54,7 +54,7 @@ class Searcher():
         self.batch_size = batch_size
         self.my_pipe_endings = []  # create pipe endings for itself and the prediction service
         pipe_endings_external = []
-    
+
         for i in range(threads):
             #create work Queues for splitting work between threads
             workqueue = queue.Queue()
@@ -92,7 +92,7 @@ class Searcher():
     # This is the function being called by the UCI Interface
     def searchPosition(self, initialFen, movelist):
         self.t_start_eval = time()
-
+        history = []
         #start the net_pred_service 
         if not self.net_pred_service.running:
             self.net_pred_service.start()
@@ -104,11 +104,14 @@ class Searcher():
 
         #fix FEN because there is no convention for empty pockets in FENs
         initialFen = initialFen.replace("[-]","[]")
-        #create board from movelist and fen 
+        #create board from movelist and fen
+        TTKey = None 
         board = chess.variant.CrazyhouseBoard(fen=initialFen)
         if movelist is not None:
             for move in movelist:
                 board.push(move)
+                HistKey = self.getHistKey(board)
+                history.append(HistKey)
         TTKey = self.getTTKey(board)
         
         print("hello")
@@ -116,7 +119,7 @@ class Searcher():
         for It_depth in range(1, 200):
 
             alpha, beta = -1, 1
-            score = self.search(board, alpha, beta, It_depth,0)
+            score = self.search(board, alpha, beta, It_depth,0, history)
             entry = self.TT_Score.get(TTKey)
             move = entry.move
 
@@ -124,15 +127,19 @@ class Searcher():
 
 
 
-    def search(self, board, alpha, beta, depth, threadID):    
+    def search(self, board, alpha, beta, depth, threadID, history):    
         self.nodes += 1
         #check for Terminal Positions
         if board.is_checkmate():
             return -1
         #include  repetiton check through history here 
-        if board.is_stalemate():
+        repetition = False
+        Occ = self.getOccurrences(board, history)
+        if Occ == 2:
+            repetition= True
+        if Occ >2:
             return 0 
-
+       
         # The FEN uniquely identifies the position
         #generate Transpostion key 
         TTkey = self.getTTKey(board)
@@ -193,7 +200,9 @@ class Searcher():
             move = moveList.pop(0)
             len = moveList.__len__()
             board.push(move)
-            score = -self.search(board, -beta, -alpha, depth-1, threadID)
+            history.append(self.getHistKey(board))
+            score = -self.search(board, -beta, -alpha, depth-1, threadID, history)
+            history.pop(-1)
             board.pop()
             if score >= beta:
                 return score
@@ -203,14 +212,14 @@ class Searcher():
 
             #if other threads are available to help, make a splitnode from this position and split the work
             #print(self.ThreadAccess.locked())
-            if depth >=2 and len >5 and self.ThreadAccess.acquire(False):
+            if depth >=1 and len >2 and self.ThreadAccess.acquire(False):
                 #print("lock acquired")
                 IDs = self.idle_threads(threadID, len-1)
                 #print(IDs)
                 self.ThreadAccess.release()
                 if(IDs):
                     t_split_start = time()
-                    s = SplitPoint(board,moveList,depth,alpha,beta, threadID, bestmove)
+                    s = SplitPoint(board,moveList,depth,alpha,beta, threadID, bestmove, history)
                     self.split(s, IDs, t_split_start)
                     self.TT_Score[TTkey] = Score_Entry(s.alpha, s.bestmove, depth)
                     return s.alpha #??? should be right, just break should return the old alpha and disregard the splitsearch
@@ -224,6 +233,9 @@ class Searcher():
 
     def getTTKey(self, board):
         return board.fen()
+    
+    def getHistKey(self, board):
+        return board.fen().split(" ")[0]
     #  Split assignes work to all the idle threads 
     def split(self, splitpoint, IDs, starttime):
         self.splits +=1
@@ -233,7 +245,15 @@ class Searcher():
         self.assign_work(splitpoint.masterID, splitpoint)
         self.t_split[splitpoint.masterID] += time() - starttime
         self.idle_loop(splitpoint.masterID, splitpoint)
-        
+
+    #retruns how often a position has occured in the current game history
+    def getOccurrences(self, board, history):
+        Occ = 0
+        bHistkey = self.getHistKey(board)
+        for histkey in history:
+            if bHistkey == histkey:
+                Occ +=1
+        return Occ
 
 
     # idle_loop in which threads go when they have nothing to do,
@@ -323,13 +343,17 @@ class Searcher():
 
     def splitpoint_search(self, splitpoint, threadID):
         splitpoint.activeThreadCount +=1
+        history = splitpoint.history.copy()
         # search new moves until the list is empty
         while splitpoint.moveList and not self.told_to_stop(threadID):
             move = self.pickMove(splitpoint)
             if move is None: break
             newBoard = splitpoint.board.copy()
             newBoard.push(move)
-            score = -self.search(newBoard,-splitpoint.beta, -splitpoint.alpha, splitpoint.depth -1, threadID)
+            history.append(self.getHistKey(newBoard))
+            score = -self.search(newBoard,-splitpoint.beta, -splitpoint.alpha, splitpoint.depth -1, threadID, history)
+            history.pop()
+            newBoard.pop()
             if score > splitpoint.beta:
                 self.tell_all_threads_stop(splitpoint)
                 break
@@ -369,8 +393,8 @@ if __name__ == "__main__":
     yappi.start()
     board = chess.variant.CrazyhouseBoard()
     movelist = None
-    netapi = NeuralNetAPI(ctx="gpu",batch_size=8)
-    s = Searcher(16,8,netapi)
+    netapi = NeuralNetAPI(ctx="gpu",batch_size=1)
+    s = Searcher(2,1,netapi)
     for depth, move, score, searchtime, nodes in s.searchPosition(board.fen(),movelist):
         print(f"depth: {depth}, selected move: {move}, score: {score}, time needed: {searchtime}, nodes searched: {nodes}")
         print(f"t_NN_eval: {s.t_NN_eval},\nt_TT_NN: {s.t_TT_NN},\nt_TT_Score: {s.t_TT_score}")
