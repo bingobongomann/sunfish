@@ -81,11 +81,11 @@ class Searcher():
         self.t_NN_eval = np.zeros(threads)
         self.t_split = np.zeros(threads)
         #start worker threads 
-        futures = []
-        executor = ThreadPoolExecutor(max_workers=self.threads-1)
+        self.futures = []
+        self.executor = ThreadPoolExecutor(max_workers=self.threads-1)
         for i in range(1,self.threads):
-            futures.append(
-                executor.submit(self.idle_loop,threadID=i, splitpoint=None )
+            self.futures.append(
+                self.executor.submit(self.idle_loop,threadID=i, splitpoint=None )
             )
 
 
@@ -387,14 +387,17 @@ class Searcher():
         move = splitpoint.moveList.pop(0)
         splitpoint.moveLock.release()
         return move
+    def stop_helpers(self):
+        for future in self.futures:
+            future.cancel()
 
 #testscript when this file is run by itself and not imported
 if __name__ == "__main__":
     yappi.start()
     board = chess.variant.CrazyhouseBoard()
     movelist = None
-    netapi = NeuralNetAPI(ctx="gpu",batch_size=1)
-    s = Searcher(2,1,netapi)
+    netapi = NeuralNetAPI(ctx="cpu",batch_size=8)
+    s = Searcher(16,8,netapi)
     for depth, move, score, searchtime, nodes in s.searchPosition(board.fen(),movelist):
         print(f"depth: {depth}, selected move: {move}, score: {score}, time needed: {searchtime}, nodes searched: {nodes}")
         print(f"t_NN_eval: {s.t_NN_eval},\nt_TT_NN: {s.t_TT_NN},\nt_TT_Score: {s.t_TT_score}")
@@ -402,7 +405,7 @@ if __name__ == "__main__":
         print(f"splits: {s.splits}, splitting times: {s.t_split}")
         print("\n")
         if depth == 5: break
-
+    s.stop_helpers()
     threads = yappi.get_thread_stats()
     for thread in threads:
         print(f"stats for yappi-thread: {thread.id}")
