@@ -2,4 +2,4 @@ numpy
 python-chess
 rtpt
 yappi 
-cutechess
+
