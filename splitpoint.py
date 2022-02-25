@@ -1,6 +1,6 @@
 import threading
 class SplitPoint():
-    def __init__(self, board, movelist, depth, alpha, beta, masterID, bestmove, history) -> None:
+    def __init__(self, board, movelist, depth, alpha, beta, masterID, bestmove, history, best) -> None:
         self.board = board.copy()
         self.moveList = movelist
         self.moveLock = threading.Lock()
@@ -8,6 +8,7 @@ class SplitPoint():
         self.depth = depth 
         self.alpha = alpha
         self.beta = beta 
+        self.best = best
         self.masterID = masterID
         self.slaveIDs = []
         self.activeThreadCount = 0
