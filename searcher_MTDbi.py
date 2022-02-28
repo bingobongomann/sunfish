@@ -3,6 +3,7 @@ from concurrent.futures import ThreadPoolExecutor
 from multiprocessing import Pipe
 import threading
 from time import time
+import chess
 import chess.variant
 import numpy as np
 import queue
@@ -38,12 +39,15 @@ class Searcher():
         self,
         threads=128,
         batch_size=64,
-        net = NeuralNetAPI
+        net = NeuralNetAPI,
+        variant = "Crazyhouse"
         ):
         # Transpostion Table for the NeuralNet evaluations 
         self.TT_NN = {}
+        self.variant = variant
         # Transpostion Table for the best score found during search
         self.TT_Score = {}
+        self.board = None
         self.nodes = 0
         self.theoretical_nodes = [(0,0)]*80
         self.depthLocks = [threading.Lock()]*80
@@ -113,17 +117,19 @@ class Searcher():
         initialFen = initialFen.replace("[-]","[]")
         #create board from movelist and fen
         TTKey = None 
-        board = chess.variant.CrazyhouseBoard(fen=initialFen)
+        if self.variant == "Crazyhouse":
+            self.board = chess.variant.CrazyhouseBoard(fen=initialFen)
+        else: self.board = chess.Board(initialFen)
         if movelist is not None:
             for move in movelist:
                 board.push(move)
-                HistKey = self.getHistKey(board)
+                HistKey = self.getHistKey(self.board)
                 history.append(HistKey)
         orig_repetition = False
-        Occ = self.getOccurrences(board, history)
+        Occ = self.getOccurrences(self.board, history)
         if Occ == 2:
             orig_repetition= True
-        TTKey = self.getTTKey(board, orig_repetition)
+        TTKey = self.getTTKey(self.board, orig_repetition)
         
         print("hello")
         # iterative deepening search 
@@ -132,8 +138,8 @@ class Searcher():
             alpha, beta = -1, 1
             while alpha< beta:
                 gamma = (alpha+beta)/2
-                print(f"gamma: {gamma}")
-                score = self.search(board, gamma, gamma,  It_depth,0, history)
+                #print(f"gamma: {gamma}")
+                score = self.search(self.board, gamma, gamma,  It_depth,0, history)
                 if score >=gamma:
                     alpha = score
                 if score <gamma:
@@ -158,9 +164,9 @@ class Searcher():
         Occ = self.getOccurrences(board, history)
         if Occ == 2:
             repetition= True
-            print("rep")
+            #print("rep")
         if Occ >2:
-            print("draw by rep")
+            #print("draw by rep")
             return 0 
         a = alpha
         # The FEN uniquely identifies the position
@@ -242,6 +248,7 @@ class Searcher():
         bestmove = None
         best = -1
         #while the list is not empty keep searching
+        if not moveList: print("no Moves!!!")
         while moveList:
             move = moveList.pop(0)
             len = moveList.__len__()
@@ -287,7 +294,6 @@ class Searcher():
             self.TT_Score[TTkey] = Score_Entry(LOWER, best, bestmove, depth)
         else: self.TT_Score[TTkey] = Score_Entry(EXACT, best, bestmove, depth)
         return best
-
 
     def stabilitycheck(self,score,alpha,beta):
         if score < alpha or score > beta:
@@ -467,25 +473,25 @@ if __name__ == "__main__":
     #yappi.start()
     board = chess.variant.CrazyhouseBoard()
     movelist = None
-    netapi = NeuralNetAPI(ctx="gpu",batch_size=1)
+    netapi = NeuralNetAPI(ctx="cpu",batch_size=1)
     s = Searcher(2,1,netapi)
     lastscore = 0
     pushmove = None
-    #while not lastscore ==1:
-    for depth, move, score, searchtime, nodes in s.searchPosition(board.fen(),movelist):
-        print(f"depth: {depth}, selected move: {move}, score: {score}, time needed: {searchtime}, nodes searched: {nodes}")
-        print(f"t_NN_eval: {s.t_NN_eval},\nt_TT_NN: {s.t_TT_NN},\nt_TT_Score: {s.t_TT_score}")
-        print(f"Transposition hits NNeval: {s.Tablehits_NN}, Transposition hits Score: {s.Tablehits_Score}, hits >= depth {s.Tablehits_Score_greater_depth}")
-        print(f"splits: {s.splits}, splitting times: {s.t_split}")
-        print("\n")
+    while not lastscore ==1:
+        for depth, move, score, searchtime, nodes in s.searchPosition(board.fen(),movelist):
+            print(f"depth: {depth}, selected move: {move}, score: {score}, time needed: {searchtime}, nodes searched: {nodes}")
+            print(f"t_NN_eval: {s.t_NN_eval},\nt_TT_NN: {s.t_TT_NN},\nt_TT_Score: {s.t_TT_score}")
+            print(f"Transposition hits NNeval: {s.Tablehits_NN}, Transposition hits Score: {s.Tablehits_Score}, hits >= depth {s.Tablehits_Score_greater_depth}")
+            print(f"splits: {s.splits}, splitting times: {s.t_split}")
+            print("\n")
        # for i in range(1,depth+1):
         #    print(f"average branches at depth {i} was {s.theoretical_nodes[i][0]}")
         #print(f"stability is {s.stability}")
-        pushmove = move
-        lastscore = score
-        if depth == 7: break
-    #board.push(pushmove)
-    #print(board.move_stack)
+            pushmove = move
+            lastscore = score
+            if depth == 6: break
+        board.push(pushmove)
+        print(board.move_stack)
     s.stop_helpers()
     #threads = yappi.get_thread_stats()
     #for thread in threads:

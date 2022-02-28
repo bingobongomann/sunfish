@@ -266,7 +266,7 @@ class Searcher():
 
             if splitpoint is not None:
                 try:
-                    work = self.work_queues[threadID].get(False)
+                    work = self.work_queues[threadID].get(False,timeout=0.0001)
                     self.splitpoint_search(work, threadID)
                 except queue.Empty:
                     pass
@@ -396,8 +396,8 @@ if __name__ == "__main__":
     yappi.start()
     board = chess.variant.CrazyhouseBoard()
     movelist = None
-    netapi = NeuralNetAPI(ctx="cpu",batch_size=8)
-    s = Searcher(16,8,netapi)
+    netapi = NeuralNetAPI(ctx="cpu",batch_size=1)
+    s = Searcher(2,1,netapi)
     for depth, move, score, searchtime, nodes in s.searchPosition(board.fen(),movelist):
         print(f"depth: {depth}, selected move: {move}, score: {score}, time needed: {searchtime}, nodes searched: {nodes}")
         print(f"t_NN_eval: {s.t_NN_eval},\nt_TT_NN: {s.t_TT_NN},\nt_TT_Score: {s.t_TT_score}")
