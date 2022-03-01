@@ -1,9 +1,12 @@
 from re import search
+from rtpt.rtpt import RTPT
 import chess
 from searcher_MTDbi import Searcher
 import sys
 sys.path.insert(0,'CrazyAra/')
 from CrazyAra.DeepCrazyhouse.src.domain.agent.neural_net_api import NeuralNetAPI
+
+rtpt = RTPT(name_initials="JH", experiment_name="Engine Rapid Test", max_iterations=111)
 
 netAPI = NeuralNetAPI(ctx="gpu")
 S = Searcher(2,1,netAPI, "standard")
@@ -27,7 +30,7 @@ for i ,epd in enumerate(epds):
     bestmoves_san.append(parts[5])
 #print(operators)
 num_correct = 0 
-
+rtpt.start()
 for i ,fen in enumerate(fens):
     chosenmove = None
     for depth, move, score, searchtime, nodes in S.searchPosition(fen, None):
@@ -55,6 +58,7 @@ for i ,fen in enumerate(fens):
         print("correct")
         num_correct +=1
     else: print("wrong")
+    rtpt.step()
 print(f"correct solved: {num_correct}, thats {num_correct/111} ")
 S.stop_helpers()
 
