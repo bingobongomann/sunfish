@@ -40,7 +40,8 @@ class Searcher():
         threads=128,
         batch_size=64,
         net = NeuralNetAPI,
-        variant = "Crazyhouse"
+        variant = "Crazyhouse",
+        quantils = QUANTILS
         ):
         # Transpostion Table for the NeuralNet evaluations 
         self.TT_NN = {}
@@ -65,6 +66,7 @@ class Searcher():
         self.batch_size = batch_size
         self.my_pipe_endings = []  # create pipe endings for itself and the prediction service
         pipe_endings_external = []
+        self.quantils = quantils
 
         for i in range(threads):
             #create work Queues for splitting work between threads
@@ -393,7 +395,7 @@ class Searcher():
     # returns all moves until the quantil is reached    
     def moveQuantilGen(self, Policy , Qidx):
         P_sum = 0
-        quantil = QUANTILS[Qidx]
+        quantil = self.quantils[Qidx]
         for tuple in Policy: 
             if P_sum<quantil:
                 P_sum += tuple[1]
