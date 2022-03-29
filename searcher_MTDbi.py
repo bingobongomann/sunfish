@@ -133,7 +133,7 @@ class Searcher():
             orig_repetition= True
         TTKey = self.getTTKey(self.board, orig_repetition)
         
-        print("hello")
+        #print("hello")
         # iterative deepening search 
         for It_depth in range(1, 200):
             self.theoretical_nodes = [(0,0)]*80
