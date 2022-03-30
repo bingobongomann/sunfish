@@ -6,12 +6,14 @@ import sys
 sys.path.insert(0,'CrazyAra/')
 from CrazyAra.DeepCrazyhouse.src.domain.agent.neural_net_api import NeuralNetAPI
 logging.basicConfig(filename="EngineTestLog.log",filemode="w",level=logging.DEBUG)
-rtpt = RTPT(name_initials="JH", experiment_name="Engine Rapid Test", max_iterations=4)
+rtpt = RTPT(name_initials="JH", experiment_name="Engine Rapid Test", max_iterations=666)
 netAPI = NeuralNetAPI(ctx="cpu", select_policy_form_planes=True)
-Quantils = [[0, .5, .75, 1],
-            [0, .6, .8, 1],
-            [0, .75, .9, 1],
-            [0, .75, .95, 1]]
+Quantils = [[0, 0.5, 0.75, 0.99],
+            [1],
+            [0, 0.5, 0.75, 1],
+            [0, 0.6, 0.8, 1],
+            [0, 0.75, 0.9 , 1],
+            [0, 0.75, 0.95, 1]]
 Results = []
 rtpt.start()
 file = open('Eigenmann Rapid Engine Chess.epd', 'r')
@@ -32,12 +34,12 @@ for i ,epd in enumerate(epds):
     fens.append(" ".join(parts[:4]))
     operators.append(parts[4])
     bestmoves_san.append(parts[5])
+
 for quantil in Quantils:
     S = Searcher(2,1,netAPI, "standard", quantil)
     
     #print(operators)
     num_correct = 0 
-
     for i ,fen in enumerate(fens):
         chosenmove = None
         for depth, move, score, searchtime, nodes in S.searchPosition(fen, None):
@@ -64,9 +66,10 @@ for quantil in Quantils:
             logging.info("correct")
             num_correct +=1
         else: logging.info("wrong")
+        rtpt.step()
+
     Results.append((num_correct, num_correct/111))
     logging.info(f"correct solved: {num_correct}, thats {num_correct/111} ")
     S.stop_helpers()
-    rtpt.step()
 for idx, result in enumerate(Results):
-    logging.info(f"Quantil-set Nr.: {idx}  num solved: {num_correct}, thats {num_correct/111*100}%")
+    logging.info(f"Quantil-set Nr.: {idx} {Quantils[idx]} num solved: {result[0]}, thats {result[1]*100}%")

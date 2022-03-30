@@ -233,7 +233,7 @@ class Searcher():
             return pred_value
 
         # generate Quantil index
-        Qidx = min(depth,QUANTILS.__len__()-1)
+        Qidx = min(depth,self.quantils.__len__()-1)
         moveList = []
         # generate the movelist from the Quantil and all the moves
         for move in self.moveQuantilGen(pred_Policy,Qidx):
