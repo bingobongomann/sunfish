@@ -26,7 +26,7 @@ def main():
     def output(line):
         print(line)
         logging.debug(line)
-    searcher = Crazysunfish.Searcher(2, 1, variant=variant, quantils = Quantil)
+    searcher = Crazysunfish.Searcher(2, 1, net=None, variant=variant, quantils = Quantil, ctx="gpu")
     if variant == "standard":
         board = chess.Board()
     else:

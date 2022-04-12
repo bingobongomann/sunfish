@@ -39,9 +39,10 @@ class Searcher():
         self,
         threads=128,
         batch_size=64,
-        net = NeuralNetAPI(),
+        net = None,
         variant = "Crazyhouse",
-        quantils = QUANTILS
+        quantils = QUANTILS,
+        ctx = "cpu"
         ):
         # Transpostion Table for the NeuralNet evaluations 
         self.TT_NN = {}
@@ -61,7 +62,10 @@ class Searcher():
         self.stop = {}
         self.stability = True
         self.ThreadAccess = threading.Lock()
-        self.net = net
+        if net is not None:
+            self.net = net
+        else: 
+            self.net = NeuralNetAPI(ctx,batch_size)
         self.threads = threads
         self.batch_size = batch_size
         self.my_pipe_endings = []  # create pipe endings for itself and the prediction service
