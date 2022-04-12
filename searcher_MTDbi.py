@@ -39,7 +39,7 @@ class Searcher():
         self,
         threads=128,
         batch_size=64,
-        net = NeuralNetAPI,
+        net = NeuralNetAPI(),
         variant = "Crazyhouse",
         quantils = QUANTILS
         ):
@@ -193,6 +193,15 @@ class Searcher():
         # timing analysis
         self.t_TT_NN[threadID] += time()-TT_NN_start - t_NN_eval
         TT_score_start = time()
+
+        #SearchDepth has been reached and Value estimated by the NN is propagated back
+        if depth == 0: 
+            #if pred_value==0.0:
+                #print(f"predicted value zero: ")
+                #print(board)
+            return pred_value
+
+
         # Check Transposition for results from previous searches
         score_Entry = self.TT_Score.get(TTkey)
         if score_Entry is not None:
@@ -225,12 +234,7 @@ class Searcher():
                         pred_Policy.insert(0, tuple)
 
         self.t_TT_score[threadID] += time() - TT_score_start
-        # SearchDepth has been reached and Value estimated by the NN is propagated back
-        if depth == 0: 
-            #if pred_value==0.0:
-                #print(f"predicted value zero: ")
-                #print(board)
-            return pred_value
+       
 
         # generate Quantil index
         Qidx = min(depth,self.quantils.__len__()-1)
@@ -248,7 +252,7 @@ class Searcher():
         self.theoretical_nodes[depth] = (avg,n+1)
         self.depthLocks[depth].release()
         bestmove = None
-        best = -1
+        best = -2
         #while the list is not empty keep searching
         if not moveList: print("no Moves!!!")
         while moveList:
@@ -281,9 +285,9 @@ class Searcher():
                     t_split_start = time()
                     s = SplitPoint(board,moveList,depth,a,beta, threadID, bestmove, history, best)
                     self.split(s, IDs, t_split_start)
-                    if s.alpha <= alpha:
+                    if s.best <= alpha:
                         self.TT_Score[TTkey] = Score_Entry(UPPER, s.best, s.bestmove, depth)
-                    elif s.alpha >= beta:
+                    elif s.best >= beta:
                         self.TT_Score[TTkey] = Score_Entry(LOWER, s.best, s.bestmove, depth)
                     else: self.TT_Score[TTkey] = Score_Entry(EXACT, s.best, s.bestmove, depth)
                     return s.best #??? should be right, just break should return the old alpha and disregard the splitsearch
@@ -342,7 +346,7 @@ class Searcher():
 
             if splitpoint is not None:
                 try:
-                    work = self.work_queues[threadID].get(False,timeout=0.0001)
+                    work = self.work_queues[threadID].get(False,timeout=0.000001)
                     self.splitpoint_search(work, threadID)
                 except queue.Empty:
                     pass
@@ -422,11 +426,11 @@ class Searcher():
     def splitpoint_search(self, splitpoint, threadID):
         splitpoint.activeThreadCount +=1
         history = splitpoint.history.copy()
+        newBoard = splitpoint.board.copy()
         # search new moves until the list is empty
         while splitpoint.moveList and not self.told_to_stop(threadID):
             move = self.pickMove(splitpoint)
             if move is None: break
-            newBoard = splitpoint.board.copy()
             newBoard.push(move)
             history.append(self.getHistKey(newBoard))
             score = -self.search(newBoard,-splitpoint.beta, -splitpoint.alpha, splitpoint.depth -1, threadID, history)
