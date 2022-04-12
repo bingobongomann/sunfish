@@ -87,7 +87,7 @@ class Searcher():
         self.batch_policy_results = np.zeros((self.threads, NB_LABELS),DTYPE)
         self.net_pred_service = NetPredService(
             pipe_endings_external,
-            net,
+            self.net,
             batch_size,
             self.batch_state_planes,
             self.batch_value_results,
