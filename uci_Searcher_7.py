@@ -47,6 +47,7 @@ def main():
         logging.debug(f'>>> {smove} ')
 
         if smove == 'quit':
+            searcher.stop_helpers()
             break
 
         elif smove == 'uci':
