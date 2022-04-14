@@ -150,7 +150,7 @@ def main():
                 # We only resign once we are mated.. That's never?
                 
 
-                output(f'bestmove {m}, Score {s}')
+                output(f'bestmove {m} Score {s}')
             else: output("Please input a position first!")
 
         elif smove.startswith('time'):
