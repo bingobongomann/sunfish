@@ -27,56 +27,53 @@ for i ,epd in enumerate(epds):
     fens.append(" ".join(parts[:4]))
     operators.append(parts[4])
     bestmoves_san.append(parts[5])
-
-with subprocess.Popen("./ClassicAra", stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE, universal_newlines=True) as CrazyAra:
-    CAin = CrazyAra.stdin
-    CAout = CrazyAra.stdout
-    CAerr = CrazyAra.stderr
-    out = None
-    while True:
-            out = CAout.readline()
-            print(f"out: {out}")
-            if out=="":
-                CAin.write("uci\n")
-                CAin.write("isready\n")
-                CAin.flush() 
-            if out == "readyok":
-                break
-    CAin.write("setoption name Batch_size value 1\n")
-    CAin.flush()
-    board = chess.Board()
-    num_correct = 0
-    for i, fen in enumerate(fens):
-        inputstring = "position "+fen+"\n"
-        board.set_fen(fen)
-        CAin.write(inputstring)
-        CAin.write("go nodes 1000\n")
+with open("ClassicArastdout.txt", "w") as out, open("ClassicArastderr","w") as err:
+    with subprocess.Popen("./ClassicAra", stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE, universal_newlines=True, bufsize=1) as CrazyAra:
+        CAin = CrazyAra.stdin
+        CAout = CrazyAra.stdout
+        CAerr = CrazyAra.stderr
+        out = None
+        for i in range(21):
+                out = CAout.readline()
+                print(out)
+        CAin.write("uci\n")
         CAin.flush()
-        while True:
-            out =CAout.readline()  
-            parts = out.split(" ")
-            if parts[0] == "bestmove":
-                movestring = parts[1]
-                chosenmove = board.san(chess.Move.from_uci(movestring))
-                break
-        
-        chosenmove = chosenmove.replace("+", "")
-        chosenmove = chosenmove.replace("-","")
-        #print(operators[i])
-        if operators[i] == "bm":
-            logging.info(f"best move: {bestmoves_san[i]}, our move: {chosenmove}")
-            if bestmoves_san[i] == chosenmove:
-                correct = True
-        if operators[i] == "am":
-            logging.info(f"avoid move: {bestmoves_san[i]}, our move: {chosenmove}")
-            if not bestmoves_san[i] == chosenmove:
-                correct = True
-                
-        if correct:
-            logging.info("correct")
-            num_correct +=1
-        else: logging.info("wrong")
-        rtpt.step()
-    logging.info(f"number of correct solved: {num_correct}")
-    CAin.write("quit\n")
-    CAin.flush()
+        print(CAout.readline()) 
+        CAin.write("setoption name Batch_size value 1\n")
+        CAin.flush()
+        board = chess.Board()
+        num_correct = 0
+        for i, fen in enumerate(fens):
+            inputstring = "position "+fen+"\n"
+            board.set_fen(fen)
+            CAin.write(inputstring)
+            CAin.write("go nodes 1000\n")
+            CAin.flush()
+            while True:
+                out =CAout.readline()  
+                parts = out.split(" ")
+                if parts[0] == "bestmove":
+                    movestring = parts[1]
+                    chosenmove = board.san(chess.Move.from_uci(movestring))
+                    break
+            
+            chosenmove = chosenmove.replace("+", "")
+            chosenmove = chosenmove.replace("-","")
+            #print(operators[i])
+            if operators[i] == "bm":
+                logging.info(f"best move: {bestmoves_san[i]}, our move: {chosenmove}")
+                if bestmoves_san[i] == chosenmove:
+                    correct = True
+            if operators[i] == "am":
+                logging.info(f"avoid move: {bestmoves_san[i]}, our move: {chosenmove}")
+                if not bestmoves_san[i] == chosenmove:
+                    correct = True
+                    
+            if correct:
+                logging.info("correct")
+                num_correct +=1
+            else: logging.info("wrong")
+            rtpt.step()
+        logging.info(f"number of correct solved: {num_correct}")
+        CAin.write("quit\n")
+        CAin.flush()
