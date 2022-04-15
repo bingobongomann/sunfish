@@ -32,12 +32,14 @@ with subprocess.Popen("./ClassicAra", stdin=subprocess.PIPE, stdout=subprocess.P
     CAin = CrazyAra.stdin
     CAout = CrazyAra.stdout
     CAerr = CrazyAra.stderr
-    CAin.write("uci\n")
-    CAin.write("isready\n")
-    CAin.flush()
     out = None
     while True:
             out = CAout.readline()
+            print(f"out: {out}")
+            if out=="":
+                CAin.write("uci\n")
+                CAin.write("isready\n")
+                CAin.flush() 
             if out == "readyok":
                 break
     CAin.write("setoption name Batch_size value 1\n")
