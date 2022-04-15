@@ -19,7 +19,7 @@ bestmoves_san =[]
 epds = []
 operators =[]
 ids = []
-evalnumbers = []*111
+evalnumbers = [0]*111
 lines[0] = lines[0].replace(" -", "",1)
 lines[4] = lines[4].replace(" -", "",1)
 for line in lines:
@@ -64,7 +64,6 @@ for i ,fen in enumerate(fens):
         num_correct +=1
     else: logging.info("wrong")
     rtpt.step()
-Results.append((num_correct, num_correct/111))
 logging.info(f"correct solved: {num_correct}, thats {num_correct/111} ")
 S.stop_helpers()
 
