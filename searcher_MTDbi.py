@@ -51,6 +51,7 @@ class Searcher():
         self.TT_Score = {}
         self.board = None
         self.nodes = 0
+        self.nn_evals = 0
         self.theoretical_nodes = [(0,0)]*80
         self.depthLocks = [threading.Lock()]*80
         self.splits = 0 
@@ -118,6 +119,7 @@ class Searcher():
         self.TT_NN.clear()
         self.TT_Score.clear()
         self.nodes = 0
+        self.nn_evals = 0
 
         #fix FEN because there is no convention for empty pockets in FENs
         initialFen = initialFen.replace("[-]","[]")
@@ -156,7 +158,7 @@ class Searcher():
             move = entry.move
             #print(alpha==beta)
 
-            yield It_depth, move, score, time()-self.t_start_eval, self.nodes
+            yield It_depth, move, score, time()-self.t_start_eval, self.nodes, self.nn_evals
 
 
 
@@ -189,6 +191,7 @@ class Searcher():
             t_NN_eval= 0
         else:
             #Transposition Table found no NN_eval entry for the Position 
+            self.nn_evals +=1
             nn_eval_start = time()
             pred_value, pred_Policy = self.evaluate_Position(board, threadID)
             t_NN_eval = time()- nn_eval_start

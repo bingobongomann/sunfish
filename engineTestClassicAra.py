@@ -3,11 +3,14 @@ import logging
 import subprocess
 import sys
 import chess
+from searcher_MTDbi import Searcher
 
-rtpt = RTPT(name_initials="JH", experiment_name="Engine Rapid Test", max_iterations=111)
-logging.basicConfig(filename="CrazyAraFirstTest.log",filemode="w",level=logging.DEBUG)
-
-
+sys.path.insert(0,'CrazyAra/')
+from CrazyAra.DeepCrazyhouse.src.domain.agent.neural_net_api import NeuralNetAPI
+logging.basicConfig(filename="EngineTestLog.log",filemode="w",level=logging.DEBUG)
+rtpt = RTPT(name_initials="JH", experiment_name="Engine Rapid Test", max_iterations=666)
+netAPI = NeuralNetAPI(ctx="gpu", select_policy_form_planes=True)
+quantil = [0, 0.99, 0.995, 1]
 rtpt.start()
 file = open('Eigenmann Rapid Engine Chess.epd', 'r')
 lines = file.readlines()
@@ -16,6 +19,7 @@ bestmoves_san =[]
 epds = []
 operators =[]
 ids = []
+evalnumbers = []*111
 lines[0] = lines[0].replace(" -", "",1)
 lines[4] = lines[4].replace(" -", "",1)
 for line in lines:
@@ -27,6 +31,45 @@ for i ,epd in enumerate(epds):
     fens.append(" ".join(parts[:4]))
     operators.append(parts[4])
     bestmoves_san.append(parts[5])
+
+S = Searcher(2,1,netAPI, "standard", quantil)
+    
+    #print(operators)
+num_correct = 0 
+for i ,fen in enumerate(fens):
+    chosenmove = None
+    for depth, move, score, searchtime, nodes, nn_evals in S.searchPosition(fen, None):
+        logging.info(f"time: {searchtime}, depth {depth}, move: {move}, score: {score}")
+        if searchtime > 15:
+            logging.info(f"move before time ran out {chosenmove}")
+            break
+        chosenmove= S.board.san(move)
+        evalnumbers[i] = nn_evals
+        if score == 1: break
+    correct = False
+    chosenmove = chosenmove.replace("+", "")
+    chosenmove = chosenmove.replace("-","")
+    #print(operators[i])
+    if operators[i] == "bm":
+        logging.info(f"best move: {bestmoves_san[i]}, our move: {chosenmove}")
+        if bestmoves_san[i] == chosenmove:
+            correct = True
+    if operators[i] == "am":
+        logging.info(f"avoid move: {bestmoves_san[i]}, our move: {chosenmove}")
+        if not bestmoves_san[i] == chosenmove:
+            correct = True
+              
+    if correct:
+        logging.info("correct")
+        num_correct +=1
+    else: logging.info("wrong")
+    rtpt.step()
+Results.append((num_correct, num_correct/111))
+logging.info(f"correct solved: {num_correct}, thats {num_correct/111} ")
+S.stop_helpers()
+
+
+    #open ClassicAra and iterate through the testpositions with the amount of nodes used by the minimax engine.
 with open("ClassicArastdout.txt", "w") as out, open("ClassicArastderr","w") as err:
     with subprocess.Popen("./ClassicAra", stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE, universal_newlines=True, bufsize=1) as CrazyAra:
         CAin = CrazyAra.stdin
@@ -70,7 +113,7 @@ with open("ClassicArastdout.txt", "w") as out, open("ClassicArastderr","w") as e
             CAin.write(inputstring)
             CAin.flush()
             print(CAout.readline())
-            CAin.write("go nodes 1000\n")
+            CAin.write(f"go nodes {evalnumbers[i]}\n")
             CAin.flush()
             while True:
                 out =CAout.readline()
