@@ -32,28 +32,31 @@ with subprocess.Popen("./ClassicAra", stdin=subprocess.PIPE, stdout=subprocess.P
     CAin = CrazyAra.stdin
     CAout = CrazyAra.stdout
     CAerr = CrazyAra.stderr
-    out = CAout.readlines()
-    print(out)
-    CAin.write('uci\n')
-    out = CAout.readlines()
-    print(out)
-    
+    CAin.write("uci\n")
+    CAin.write("isready\n")
+    CAin.flush()
+    out = None
+    while True:
+            out = CAout.readline()
+            if out == "readyok":
+                break
     CAin.write("setoption name Batch_size value 1\n")
+    CAin.flush()
     board = chess.Board()
     num_correct = 0
     for i, fen in enumerate(fens):
-        inputstring = "position "+fen
-        board.set_board_fen(fen)
+        inputstring = "position "+fen+"\n"
+        board.set_fen(fen)
         CAin.write(inputstring)
         CAin.write("go nodes 1000\n")
+        CAin.flush()
         while True:
-            if CAout.readable():
-                out =CAout.readline()  
-                parts = out.split(" ")
-                if parts[0] == "bestmove":
-                    movestring = parts[1]
-                    chosenmove = board.san(chess.Move.from_uci(movestring))
-                    break
+            out =CAout.readline()  
+            parts = out.split(" ")
+            if parts[0] == "bestmove":
+                movestring = parts[1]
+                chosenmove = board.san(chess.Move.from_uci(movestring))
+                break
         
         chosenmove = chosenmove.replace("+", "")
         chosenmove = chosenmove.replace("-","")
@@ -74,3 +77,4 @@ with subprocess.Popen("./ClassicAra", stdin=subprocess.PIPE, stdout=subprocess.P
         rtpt.step()
     logging.info(f"number of correct solved: {num_correct}")
     CAin.write("quit\n")
+    CAin.flush()
