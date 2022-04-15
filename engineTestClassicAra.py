@@ -28,17 +28,18 @@ for i ,epd in enumerate(epds):
     operators.append(parts[4])
     bestmoves_san.append(parts[5])
 
-with subprocess.Popen("./CrazyAra", stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE, universal_newlines=True) as CrazyAra:
+with subprocess.Popen("./ClassicAra", stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE, universal_newlines=True) as CrazyAra:
     CAin = CrazyAra.stdin
     CAout = CrazyAra.stdout
     CAerr = CrazyAra.stderr
     CAin.write("uci\n")
     CAin.write("isready\n")
+    out = None
     while True:
-        out = CAout.read()
-        if out == "readyok":
-            break
-
+        if CAout.readable():
+            out = CAout.readline()
+            if out == "readyok":
+                break
     CAin.write("setoption name Batch_size value 1\n")
     board = chess.Board()
     num_correct = 0
@@ -48,12 +49,13 @@ with subprocess.Popen("./CrazyAra", stdin=subprocess.PIPE, stdout=subprocess.PIP
         CAin.write(inputstring)
         CAin.write("go nodes 1000\n")
         while True:
-            out =CAout.read()  
-            parts = out.split(" ")
-            if parts[0] == "bestmove":
-                movestring = parts[1]
-                chosenmove = board.san(chess.Move.from_uci(movestring))
-                break
+            if CAout.readable():
+                out =CAout.readline()  
+                parts = out.split(" ")
+                if parts[0] == "bestmove":
+                    movestring = parts[1]
+                    chosenmove = board.san(chess.Move.from_uci(movestring))
+                    break
         
         chosenmove = chosenmove.replace("+", "")
         chosenmove = chosenmove.replace("-","")
