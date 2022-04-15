@@ -27,52 +27,19 @@ for i ,epd in enumerate(epds):
     fens.append(" ".join(parts[:4]))
     operators.append(parts[4])
     bestmoves_san.append(parts[5])
-
-with subprocess.Popen("./ClassicAra", stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE, universal_newlines=True) as CrazyAra:
-    CAin = CrazyAra.stdin
-    CAout = CrazyAra.stdout
-    CAerr = CrazyAra.stderr
-    CAin.write("uci\n")
-    CAin.write("isready\n")
-    out = None
-    while True:
-        if CAout.readable():
-            out = CAout.readline()
-            if out == "readyok":
-                break
-    CAin.write("setoption name Batch_size value 1\n")
-    board = chess.Board()
-    num_correct = 0
-    for i, fen in enumerate(fens):
-        inputstring = "position "+fen
-        board.set_board_fen(fen)
-        CAin.write(inputstring)
-        CAin.write("go nodes 1000\n")
-        while True:
-            if CAout.readable():
-                out =CAout.readline()  
-                parts = out.split(" ")
-                if parts[0] == "bestmove":
-                    movestring = parts[1]
-                    chosenmove = board.san(chess.Move.from_uci(movestring))
-                    break
-        
-        chosenmove = chosenmove.replace("+", "")
-        chosenmove = chosenmove.replace("-","")
-        #print(operators[i])
-        if operators[i] == "bm":
-            logging.info(f"best move: {bestmoves_san[i]}, our move: {chosenmove}")
-            if bestmoves_san[i] == chosenmove:
-                correct = True
-        if operators[i] == "am":
-            logging.info(f"avoid move: {bestmoves_san[i]}, our move: {chosenmove}")
-            if not bestmoves_san[i] == chosenmove:
-                correct = True
-                
-        if correct:
-            logging.info("correct")
-            num_correct +=1
-        else: logging.info("wrong")
-        rtpt.step()
-    logging.info(f"number of correct solved: {num_correct}")
-    CAin.write("quit\n")
+with open("ClassicArastdout.txt","w") as out, open("ClassicArastderr.txt", "w") as err:
+    with subprocess.Popen("./ClassicAra", stdin=subprocess.PIPE, stdout=out, stderr=err, universal_newlines=True) as CrazyAra:
+        CAin = CrazyAra.stdin
+        CAout = CrazyAra.stdout
+        CAerr = CrazyAra.stderr
+        input = ""
+        input.__add__("uci\n")
+        input.__add__("isready\n")
+        #set engine options
+        input.__add__("setoption name Batch_size value 1\n")
+        for i, fen in enumerate(fens):
+            inputstring = "position "+fen+"\n"
+            input.__add__(inputstring)
+            input.__add__("go nodes 1000\n")
+        input.__add__("quit\n")
+        CrazyAra.communicate(input)
