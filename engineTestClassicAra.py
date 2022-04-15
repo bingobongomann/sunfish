@@ -38,25 +38,51 @@ with open("ClassicArastdout.txt", "w") as out, open("ClassicArastderr","w") as e
                 print(out)
         CAin.write("uci\n")
         CAin.flush()
-        print(CAout.readline()) 
+        while True:
+            out = CAout.readline()
+            print(out)
+            if out == "uciok\n":
+                break
+        CAin.write("isready\n")
+        CAin.flush()
+        while True:
+            out = CAout.readline()
+            print(out)
+            if out =="readyok\n":
+                break
         CAin.write("setoption name Batch_size value 1\n")
         CAin.flush()
+        print(CAout.readline())
         board = chess.Board()
         num_correct = 0
         for i, fen in enumerate(fens):
-            inputstring = "position "+fen+"\n"
+            correct = False
+            inputstring = "position fen "+fen+" moves\n"
             board.set_fen(fen)
+            print(f"number {i}: fen: {fen}")
+            print(inputstring)
+            CAin.write("ucinewgame\n")
+            CAin.flush()
+            print(CAout.readline())
+            CAin.write("isready\n")
+            CAin.flush()
+            print(CAout.readline())
             CAin.write(inputstring)
+            CAin.flush()
+            print(CAout.readline())
             CAin.write("go nodes 1000\n")
             CAin.flush()
             while True:
-                out =CAout.readline()  
+                out =CAout.readline()
+                print(out)
                 parts = out.split(" ")
-                if parts[0] == "bestmove":
+                if parts[0] =="bestmove":
+                    print(out)
                     movestring = parts[1]
+                    movestring = movestring.replace("\n", "")
                     chosenmove = board.san(chess.Move.from_uci(movestring))
                     break
-            
+            CAout.readline()
             chosenmove = chosenmove.replace("+", "")
             chosenmove = chosenmove.replace("-","")
             #print(operators[i])
@@ -74,6 +100,7 @@ with open("ClassicArastdout.txt", "w") as out, open("ClassicArastderr","w") as e
                 num_correct +=1
             else: logging.info("wrong")
             rtpt.step()
+            print(f"num correct: {num_correct}")
         logging.info(f"number of correct solved: {num_correct}")
         CAin.write("quit\n")
         CAin.flush()
