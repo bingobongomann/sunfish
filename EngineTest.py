@@ -5,15 +5,11 @@ from searcher_MTDbi import Searcher
 import sys
 sys.path.insert(0,'CrazyAra/')
 from CrazyAra.DeepCrazyhouse.src.domain.agent.neural_net_api import NeuralNetAPI
-logging.basicConfig(filename="EngineTestLog.log",filemode="w",level=logging.DEBUG)
+logging.basicConfig(filename="EngineTestwithAverage.log",filemode="w",level=logging.DEBUG)
 rtpt = RTPT(name_initials="JH", experiment_name="Engine Rapid Test", max_iterations=666)
 netAPI = NeuralNetAPI(ctx="cpu", select_policy_form_planes=True)
-Quantils = [[0, 0.5, 0.75, 0.99],
-            [1],
-            [0, 0.5, 0.75, 1],
-            [0, 0.6, 0.8, 1],
-            [0, 0.75, 0.9 , 1],
-            [0, 0.75, 0.95, 1]]
+Quantils = [[0, 0.9, 0.995, 1]]
+            
 Results = []
 rtpt.start()
 file = open('Eigenmann Rapid Engine Chess.epd', 'r')
@@ -25,6 +21,8 @@ operators =[]
 ids = []
 lines[0] = lines[0].replace(" -", "",1)
 lines[4] = lines[4].replace(" -", "",1)
+nodesperdepth = [0]*200
+hitsperdepth = [0]*200
 for line in lines:
     parts = line.split(";")
     epds.append(parts[0])
@@ -42,8 +40,10 @@ for quantil in Quantils:
     num_correct = 0 
     for i ,fen in enumerate(fens):
         chosenmove = None
-        for depth, move, score, searchtime, nodes in S.searchPosition(fen, None):
+        for depth, move, score, searchtime, nodes , nn_evals in S.searchPosition(fen, None):
             logging.info(f"time: {searchtime}, depth {depth}, move: {move}, score: {score}")
+            nodesperdepth[depth] += nn_evals
+            hitsperdepth[depth] +=1
             if searchtime > 15:
                 logging.info(f"move before time ran out {chosenmove}")
                 break
@@ -73,3 +73,7 @@ for quantil in Quantils:
     S.stop_helpers()
 for idx, result in enumerate(Results):
     logging.info(f"Quantil-set Nr.: {idx} {Quantils[idx]} num solved: {result[0]}, thats {result[1]*100}%")
+for i, nodes in enumerate(nodesperdepth):
+    hits = hitsperdepth[i]
+    if hits>0:        
+        logging.info(f"depth {i}: average of {hits} times is {nodes/hits}")
