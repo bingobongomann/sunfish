@@ -3,6 +3,7 @@ from concurrent.futures import ThreadPoolExecutor
 from multiprocessing import Pipe
 import threading
 from time import time
+import logging
 import chess
 import chess.variant
 import numpy as np
@@ -23,7 +24,7 @@ FINISHED = object()
 EXACT = 0 
 LOWER = 1
 UPPER = 2
-
+logging.basicConfig(filename="NNevalsPerDepth_Log.Log", filemode="a", level=logging.DEBUG)
 #TODO: include self written history of positions for easy and cheap repetiton and draw detection
 #       potetially rework the TT key for more Transposition Hits on the NN_Eval 
 #       
@@ -52,6 +53,8 @@ class Searcher():
         self.board = None
         self.nodes = 0
         self.nn_evals = 0
+        self.nn_evalsperdepth = [0]*200
+        self.hitsperdepth = [0]*200
         self.theoretical_nodes = [(0,0)]*80
         self.depthLocks = [threading.Lock()]*80
         self.splits = 0 
@@ -157,7 +160,8 @@ class Searcher():
             entry = self.TT_Score.get(TTKey)
             move = entry.move
             #print(alpha==beta)
-
+            self.nn_evalsperdepth[It_depth] += self.nn_evals
+            self.hitsperdepth[It_depth] += 1
             yield It_depth, move, score, time()-self.t_start_eval, self.nodes, self.nn_evals
 
 
@@ -478,6 +482,10 @@ class Searcher():
         splitpoint.moveLock.release()
         return move
     def stop_helpers(self):
+        #logging for research
+        for i , evals, n in enumerate(zip(self.nn_evalsperdepth, self.hitsperdepth)):
+            if n >0:
+                logging.debug(f"depth{i}: evals: {evals} n: {n} average: {evals/n}")
         for i in range(1,self.threads):
             self.work_queues[i].put(FINISHED)
 
