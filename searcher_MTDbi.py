@@ -483,9 +483,10 @@ class Searcher():
         return move
     def stop_helpers(self):
         #logging for research
-        for i , evals, n in enumerate(zip(self.nn_evalsperdepth, self.hitsperdepth)):
-            if n >0:
-                logging.debug(f"depth{i}: evals: {evals} n: {n} average: {evals/n}")
+        if self.variant=="Crazyhouse":
+            for i , tuple in enumerate(zip(self.nn_evalsperdepth, self.hitsperdepth)):
+                if tuple[1] >0:
+                    logging.debug(f"depth{i}: evals: {tuple[0]} n: {tuple[1]} average: {tuple[0]/tuple[1]}")
         for i in range(1,self.threads):
             self.work_queues[i].put(FINISHED)
 
