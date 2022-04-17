@@ -4,6 +4,7 @@
 from __future__ import print_function
 from __future__ import division
 import importlib
+from platform import node
 import re
 import sys
 import time
@@ -85,11 +86,12 @@ def main():
                     fenpart = smove
 
                 _, _, fen = fenpart.split(' ', 2)
-                print(fen)
+                output("new position: "+fen)
 
             elif params[1] == 'startpos':
+                
                 fen = board.starting_fen
-
+                output("startpos: "+fen)
             else:
                 pass
             
@@ -137,7 +139,7 @@ def main():
 
                     if show_thinking:
                         usedtime = int((time.time() - start)*1000)
-                        output('info depth {} score cp  {} time {}ms nodes {}'.format(sdepth, _score, usedtime, nodes ))
+                        output(f'info depth {sdepth} score cp  {_score} time {usedtime}ms nodes {nodes}')
 
                         #ponder = moves[1]
 
