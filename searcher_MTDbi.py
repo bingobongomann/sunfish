@@ -133,7 +133,7 @@ class Searcher():
         else: self.board = chess.Board(initialFen)
         if movelist is not None:
             for move in movelist:
-                board.push(move)
+                self.board.push(move)
                 HistKey = self.getHistKey(self.board)
                 history.append(HistKey)
         orig_repetition = False
