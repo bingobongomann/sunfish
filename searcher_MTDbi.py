@@ -499,7 +499,7 @@ if __name__ == "__main__":
     lastscore = 0
     pushmove = None
     while not lastscore ==1:
-        for depth, move, score, searchtime, nodes in s.searchPosition(board.fen(),movelist):
+        for depth, move, score, searchtime, nodes, nn_evals in s.searchPosition(board.fen(),movelist):
             print(f"depth: {depth}, selected move: {move}, score: {score}, time needed: {searchtime}, nodes searched: {nodes}")
             print(f"t_NN_eval: {s.t_NN_eval},\nt_TT_NN: {s.t_TT_NN},\nt_TT_Score: {s.t_TT_score}")
             print(f"Transposition hits NNeval: {s.Tablehits_NN}, Transposition hits Score: {s.Tablehits_Score}, hits >= depth {s.Tablehits_Score_greater_depth}")

@@ -17,26 +17,10 @@ variant = "standard"
 Quantil = [1]
 
 def main():
-    parser = argparse.ArgumentParser()
-    parser.add_argument('module', help='crazysunfishIterativeWidening.py file (without .py)', type=str, default='searcher_MTDbi', nargs='?')
-    args = parser.parse_args()
-
-    Crazysunfish = importlib.import_module(args.module)
-    logging.basicConfig(filename='CrazysunfishIterativeWidening.log', level=logging.DEBUG)
+    initial = True
     def output(line):
-        print(line)
-        logging.debug(line)
-    searcher = Crazysunfish.Searcher(2, 1, net=None, variant=variant, quantils = Quantil, ctx="gpu")
-    if variant == "standard":
-        board = chess.Board()
-    else:
-        board = chess.variant.CrazyhouseBoard()
-    
-    our_time, opp_time = 1000, 1000 # time in centi-seconds
-    show_thinking = True
-    hist = []
-    fen = None
-    repetition = False
+                print(line)
+                logging.debug(line)
     stack = []
     while True:
         if stack:
@@ -57,6 +41,26 @@ def main():
             output('uciok')
 
         elif smove == 'isready':
+            if initial:
+                initial=False
+                parser = argparse.ArgumentParser()
+                parser.add_argument('module', help='crazysunfishIterativeWidening.py file (without .py)', type=str, default='searcher_MTDbi', nargs='?')
+                args = parser.parse_args()
+
+                Crazysunfish = importlib.import_module(args.module)
+                logging.basicConfig(filename='CrazysunfishIterativeWidening.log', level=logging.DEBUG)
+                
+                searcher = Crazysunfish.Searcher(2, 1, net=None, variant=variant, quantils = Quantil, ctx="gpu")
+                if variant == "standard":
+                    board = chess.Board()
+                else:
+                    board = chess.variant.CrazyhouseBoard()
+                
+                our_time, opp_time = 1000, 1000 # time in centi-seconds
+                show_thinking = True
+                hist = []
+                fen = None
+                repetition = False
             output('readyok')
 
         elif smove == 'ucinewgame':
@@ -121,7 +125,7 @@ def main():
             f = 1
             ponder = None
             if fen is not None:
-                for sdepth, _move, _score , searchingtime, nodes in searcher.searchPosition(fen, moveslist):
+                for sdepth, _move, _score , searchingtime, nodes , nn_evals in searcher.searchPosition(fen, moveslist):
 
                     newtime = time.time()
                     it_time = newtime -oldtime

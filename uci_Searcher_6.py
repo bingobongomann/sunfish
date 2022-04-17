@@ -125,7 +125,7 @@ def main():
             f = 1
             ponder = None
             if fen is not None:
-                for sdepth, _move, _score , searchingtime, nodes in searcher.searchPosition(fen, moveslist):
+                for sdepth, _move, _score , searchingtime, nodes , nn_evals in searcher.searchPosition(fen, moveslist):
 
                     newtime = time.time()
                     it_time = newtime -oldtime
