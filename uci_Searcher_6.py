@@ -17,26 +17,9 @@ variant = "standard"
 Quantil = [0,0.99,0.995,1]
 
 def main():
-    parser = argparse.ArgumentParser()
-    parser.add_argument('module', help='crazysunfishIterativeWidening.py file (without .py)', type=str, default='searcher_MTDbi', nargs='?')
-    args = parser.parse_args()
-
-    Crazysunfish = importlib.import_module(args.module)
-    logging.basicConfig(filename='CrazysunfishIterativeWidening.log', level=logging.DEBUG)
     def output(line):
-        print(line)
-        logging.debug(line)
-    searcher = Crazysunfish.Searcher(2, 1, net=None, variant=variant, quantils = Quantil, ctx="gpu")
-    if variant == "standard":
-        board = chess.Board()
-    else:
-        board = chess.variant.CrazyhouseBoard()
-    
-    our_time, opp_time = 1000, 1000 # time in centi-seconds
-    show_thinking = True
-    hist = []
-    fen = None
-    repetition = False
+                print(line)
+                logging.debug(line)
     stack = []
     while True:
         if stack:
@@ -57,6 +40,24 @@ def main():
             output('uciok')
 
         elif smove == 'isready':
+            parser = argparse.ArgumentParser()
+            parser.add_argument('module', help='crazysunfishIterativeWidening.py file (without .py)', type=str, default='searcher_MTDbi', nargs='?')
+            args = parser.parse_args()
+
+            Crazysunfish = importlib.import_module(args.module)
+            logging.basicConfig(filename='CrazysunfishIterativeWidening.log', level=logging.DEBUG)
+            
+            searcher = Crazysunfish.Searcher(2, 1, net=None, variant=variant, quantils = Quantil, ctx="gpu")
+            if variant == "standard":
+                board = chess.Board()
+            else:
+                board = chess.variant.CrazyhouseBoard()
+            
+            our_time, opp_time = 1000, 1000 # time in centi-seconds
+            show_thinking = True
+            hist = []
+            fen = None
+            repetition = False
             output('readyok')
 
         elif smove == 'ucinewgame':
