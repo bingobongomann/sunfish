@@ -51,7 +51,7 @@ def main():
                 Crazysunfish = importlib.import_module(args.module)
                 logging.basicConfig(filename='CrazysunfishIterativeWidening.log', level=logging.DEBUG)
                 
-                searcher = Crazysunfish.Searcher(2, 1, net=None, variant=variant, quantils = Quantil, ctx="cpu")
+                searcher = Crazysunfish.Searcher(2, 1, net=None, variant=variant, quantils = Quantil, ctx="gpu")
                 if variant == "standard":
                     board = chess.Board()
                 else:
@@ -69,7 +69,7 @@ def main():
         elif smove.startswith('setoption'):
             params = smove.split(" ")
             if params[2] == "gpu_id":
-                searcher = Crazysunfish.Searcher(2, 1, net=None, variant=variant, quantils = Quantil, ctx="cpu", gpu_id=params[4])
+                searcher = Crazysunfish.Searcher(2, 1, net=None, variant=variant, quantils = Quantil, ctx="gpu", gpu_id=params[4])
                 output(f"changed gpu_id to {params[4]}")
         # syntax specified in UCI
         # position [fen  | startpos ]  moves  ....
