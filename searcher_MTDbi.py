@@ -43,7 +43,8 @@ class Searcher():
         net = None,
         variant = "Crazyhouse",
         quantils = QUANTILS,
-        ctx = "cpu"
+        ctx = "cpu",
+        gpu_id = None
         ):
         # Transpostion Table for the NeuralNet evaluations 
         self.TT_NN = {}
@@ -69,7 +70,10 @@ class Searcher():
         if net is not None:
             self.net = net
         else: 
-            self.net = NeuralNetAPI(ctx,batch_size)
+            if gpu_id is not None:  
+                self.net = NeuralNetAPI(ctx,batch_size, gpu_id=gpu_id)
+            else: 
+                self.net = NeuralNetAPI(ctx,batch_size)
         self.threads = threads
         self.batch_size = batch_size
         self.my_pipe_endings = []  # create pipe endings for itself and the prediction service

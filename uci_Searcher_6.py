@@ -29,7 +29,7 @@ def main():
         else:
             smove = input()
 
-        logging.debug(f'>>> {smove} ')
+        output(f'>>> {smove} ')
 
         if smove == 'quit':
             searcher.stop_helpers()
@@ -51,7 +51,7 @@ def main():
                 Crazysunfish = importlib.import_module(args.module)
                 logging.basicConfig(filename='CrazysunfishIterativeWidening.log', level=logging.DEBUG)
                 
-                searcher = Crazysunfish.Searcher(2, 1, net=None, variant=variant, quantils = Quantil, ctx="gpu")
+                searcher = Crazysunfish.Searcher(2, 1, net=None, variant=variant, quantils = Quantil, ctx="cpu")
                 if variant == "standard":
                     board = chess.Board()
                 else:
@@ -66,7 +66,11 @@ def main():
 
         elif smove == 'ucinewgame':
             stack.append('position fen ' + board.starting_fen)
-
+        elif smove.startswith('setoption'):
+            params = smove.split(" ")
+            if params[2] == "gpu_id":
+                searcher = Crazysunfish.Searcher(2, 1, net=None, variant=variant, quantils = Quantil, ctx="cpu", gpu_id=params[4])
+                output(f"changed gpu_id to {params[4]}")
         # syntax specified in UCI
         # position [fen  | startpos ]  moves  ....
 
@@ -87,6 +91,7 @@ def main():
 
                 _, _, fen = fenpart.split(' ', 2)
                 output("new position: "+fen)
+                output(f"moves:{moveslist}")
 
             elif params[1] == 'startpos':
                 
