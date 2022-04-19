@@ -156,11 +156,13 @@ def main():
 
                     if sdepth >= depth:
                         break
-
+                    if _score ==1 or _score == -1:
+                        break
                 m, s = _move, _score
                 # We only resign once we are mated.. That's never?
                 
-
+                if s == -1:
+                    output("resign")
                 output(f'bestmove {m} Score {s}')
             else: output("Please input a position first!")
 
