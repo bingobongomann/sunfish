@@ -12,7 +12,7 @@ import argparse
 import chess.variant
 import chess
 
-variant = "standard"
+variant = "Crazyhouse"
 
 Quantil = [0,0.6,0.8,1]
 
