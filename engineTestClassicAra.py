@@ -32,40 +32,40 @@ for i ,epd in enumerate(epds):
     operators.append(parts[4])
     bestmoves_san.append(parts[5])
 
-S = Searcher(2,1,netAPI, "standard", quantil)
+#S = Searcher(2,1,netAPI, "standard", quantil)
     
     #print(operators)
 num_correct = 0 
-for i ,fen in enumerate(fens):
-    chosenmove = None
-    for depth, move, score, searchtime, nodes, nn_evals in S.searchPosition(fen, None):
-        logging.info(f"time: {searchtime}, depth {depth}, move: {move}, score: {score}")
-        if searchtime > 15:
-            logging.info(f"move before time ran out {chosenmove}")
-            break
-        chosenmove= S.board.san(move)
-        evalnumbers[i] = nn_evals
-        if score == 1: break
-    correct = False
-    chosenmove = chosenmove.replace("+", "")
-    chosenmove = chosenmove.replace("-","")
-    #print(operators[i])
-    if operators[i] == "bm":
-        logging.info(f"best move: {bestmoves_san[i]}, our move: {chosenmove}")
-        if bestmoves_san[i] == chosenmove:
-            correct = True
-    if operators[i] == "am":
-        logging.info(f"avoid move: {bestmoves_san[i]}, our move: {chosenmove}")
-        if not bestmoves_san[i] == chosenmove:
-            correct = True
-              
-    if correct:
-        logging.info("correct")
-        num_correct +=1
-    else: logging.info("wrong")
-    rtpt.step()
-logging.info(f"correct solved: {num_correct}, thats {num_correct/111} ")
-S.stop_helpers()
+#for i ,fen in enumerate(fens):
+#    chosenmove = None
+#    for depth, move, score, searchtime, nodes, nn_evals in S.searchPosition(fen, None):
+#        logging.info(f"time: {searchtime}, depth {depth}, move: {move}, score: {score}")
+#        if searchtime > 15:
+#            logging.info(f"move before time ran out {chosenmove}")
+#            break
+#        chosenmove= S.board.san(move)
+#        evalnumbers[i] = nn_evals
+#        if score == 1: break
+#    correct = False
+#    chosenmove = chosenmove.replace("+", "")
+#    chosenmove = chosenmove.replace("-","")
+#    #print(operators[i])
+#    if operators[i] == "bm":
+#        logging.info(f"best move: {bestmoves_san[i]}, our move: {chosenmove}")
+#        if bestmoves_san[i] == chosenmove:
+#            correct = True
+#    if operators[i] == "am":
+#        logging.info(f"avoid move: {bestmoves_san[i]}, our move: {chosenmove}")
+#        if not bestmoves_san[i] == chosenmove:
+#            correct = True
+#              
+#    if correct:
+#        logging.info("correct")
+#        num_correct +=1
+#    else: logging.info("wrong")
+#    rtpt.step()
+#logging.info(f"correct solved: {num_correct}, thats {num_correct/111} ")
+#S.stop_helpers()
 
 
     #open ClassicAra and iterate through the testpositions with the amount of nodes used by the minimax engine.
@@ -92,7 +92,7 @@ with open("ClassicArastdout.txt", "w") as out, open("ClassicArastderr","w") as e
             print(out)
             if out =="readyok\n":
                 break
-        CAin.write("setoption name Batch_size value 1\n")
+        CAin.write("setoption name Batch_size value 1\n setoption name Use_Raw_Network value True\n")
         CAin.flush()
         print(CAout.readline())
         board = chess.Board()
@@ -112,7 +112,7 @@ with open("ClassicArastdout.txt", "w") as out, open("ClassicArastderr","w") as e
             CAin.write(inputstring)
             CAin.flush()
             print(CAout.readline())
-            CAin.write(f"go nodes {evalnumbers[i]}\n")
+            CAin.write(f"go\n")
             CAin.flush()
             while True:
                 out =CAout.readline()
