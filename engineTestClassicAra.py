@@ -112,7 +112,7 @@ with open("ClassicArastdout.txt", "w") as out, open("ClassicArastderr","w") as e
             CAin.write(inputstring)
             CAin.flush()
             print(CAout.readline())
-            CAin.write(f"go\n")
+            CAin.write(f"go nodes 1\n")
             CAin.flush()
             while True:
                 out =CAout.readline()
